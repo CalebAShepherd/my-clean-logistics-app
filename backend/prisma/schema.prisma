@@ -1,0 +1,108 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  username  String   @unique
+  password  String
+  role      Role
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  clientShipments     Shipment[] @relation("ClientShipments")
+  dispatcherShipments Shipment[] @relation("DispatcherShipments")
+  carrierShipments    Shipment[] @relation("CarrierShipments")
+}
+
+model Shipment {
+  id           String   @id @default(uuid())
+  clientId     String
+  client       User     @relation("ClientShipments", fields: [clientId], references: [id])
+  dispatcherId String?
+  carrierId    String?
+  status       ShipmentStatus @default(CREATED)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  origin               String
+  destination          String
+  description          String? 
+  weight               Float
+  pickupName           String
+  pickupPhone          String
+  pickupEmail          String
+  deliveryName         String
+  deliveryPhone        String
+  deliveryEmail        String
+  shipmentDate         DateTime
+  length               Float
+  width                Float
+  height               Float
+  quantity             Int
+  specialInstructions  String?
+  insurance            Boolean
+  reference            String?
+  dispatcher User? @relation("DispatcherShipments", fields: [dispatcherId], references: [id])
+  carrier    User? @relation("CarrierShipments", fields: [carrierId], references: [id])
+
+  // Link to a service carrier (UPS, FedEx, DHL, etc.)
+  serviceCarrierId     String?  
+  serviceCarrier       Carrier? @relation("ServiceCarrierShipments", fields: [serviceCarrierId], references: [id])
+  trackingNumber       String?
+}
+
+// Third-party carriers (UPS, FedEx, etc.)
+model Carrier {
+  id         String     @id @default(uuid())
+  name       String
+  code       String     @unique
+  apiKey     String?
+  apiSecret  String?
+  shipments  Shipment[] @relation("ServiceCarrierShipments")
+}
+
+enum Role {
+  admin
+  client
+  dispatcher
+  carrier
+  dev
+}
+
+enum ShipmentStatus {
+  CREATED
+  ASSIGNED
+  IN_TRANSIT
+  DELIVERED
+}
+
+// Application-wide feature flags and branding
+model CompanySettings {
+  id                    String   @id @default(uuid())
+  companyName           String?
+  logoUrl               String?
+  hasWarehouses         Boolean  @default(false)
+  ownTransporters       Boolean  @default(false)
+  useThirdPartyCarriers Boolean  @default(true)
+  enableTrackingInput   Boolean  @default(true)
+  enableAddressValidation Boolean @default(true)
+  enableRateQuotes      Boolean  @default(true)
+  enablePickups         Boolean  @default(true)
+  enableNotifications   Boolean  @default(true)
+  enableDevTools        Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Warehouse {
+  id        String   @id @default(uuid())
+  name      String
+  address   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
