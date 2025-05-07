@@ -104,3 +104,4 @@ const styles = StyleSheet.create({
   deleteBtn: { marginTop: 16 }
 }); 
 // export default withScreenLayout(LocationDetailScreen, { title: 'LocationDetail' });
+export default LocationDetailScreen;

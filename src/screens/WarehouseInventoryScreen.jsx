@@ -101,3 +101,4 @@ const styles = StyleSheet.create({
   sep: { height: 1, backgroundColor: '#eee' },
 }); 
 //  export default withScreenLayout(WarehouseInventoryScreen, { title: 'WarehouseInventory' });
+export default WarehouseInventoryScreen;

@@ -16,7 +16,7 @@ export default function AdminUsersScreen() {
   const [editingId, setEditingId] = useState(null);
   const [newRole, setNewRole] = useState('');
 
-  const roles = ['admin', 'client', 'dispatcher', 'carrier', 'warehouse-admin'];
+  const roles = ['admin', 'client', 'dispatcher', 'carrier', 'warehouse_admin'];
 
   useEffect(() => {
     fetch(`${API_URL}/users`, {

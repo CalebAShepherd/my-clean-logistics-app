@@ -141,3 +141,4 @@ const styles = StyleSheet.create({
   picker: { marginTop: 8, marginBottom: 8 },
 }); 
 // export default withScreenLayout(AssignTransportersScreen, { title: 'AssignTransporters' });
+export default AssignTransportersScreen;

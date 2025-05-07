@@ -106,3 +106,4 @@ const styles = StyleSheet.create({
   },  
 }); 
 // export default withScreenLayout(TransportManagementScreen, { title: 'TransportManagement' });
+export default TransportManagementScreen;

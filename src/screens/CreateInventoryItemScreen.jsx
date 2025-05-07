@@ -55,3 +55,4 @@ const styles = StyleSheet.create({
   loading: { marginTop: 16 },
 }); 
 // export default withScreenLayout(CreateInventoryItemScreen, { title: 'CreateInventoryItem' });
+export default CreateInventoryItemScreen;

@@ -183,3 +183,4 @@ const styles = StyleSheet.create({
   },
 }); 
 // export default withScreenLayout(WarehouseAdminDashboardScreen, { title: 'WarehouseAdminDashboard' });
+export default WarehouseAdminDashboardScreen;

@@ -187,4 +187,4 @@ const styles = StyleSheet.create({
     marginLeft: 8 
   },
 }); 
-// export default withScreenLayout(AdminDashboardScreen, { title: 'Admin Dashboard' });
+export default AdminDashboardScreen;

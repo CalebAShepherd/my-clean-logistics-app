@@ -58,3 +58,4 @@ const styles = StyleSheet.create({
   title: { fontWeight: 'bold', marginBottom: 4 },
 }); 
 //  export default withScreenLayout(RouteHistoryScreen, { title: 'RouteHistory' });
+export default RouteHistoryScreen;

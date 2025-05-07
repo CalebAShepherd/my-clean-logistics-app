@@ -106,3 +106,4 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 8 },
 }); 
 // export default withScreenLayout(AnalyticsScreen, { title: 'Analytics' });
+export default AnalyticsScreen;

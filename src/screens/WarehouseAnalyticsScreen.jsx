@@ -96,3 +96,4 @@ const styles = StyleSheet.create({
   chart: { borderRadius: 8 },
 }); 
 // export default withScreenLayout(WarehouseAnalyticsScreen, { title: 'WarehouseAnalytics' });
+export default WarehouseAnalyticsScreen;

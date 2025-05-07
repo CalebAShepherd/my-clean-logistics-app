@@ -88,3 +88,4 @@ const styles = StyleSheet.create({
   separator: { height: 12 }
 }); 
 // export default withScreenLayout(OffersScreen, { title: 'Offers' });
+export default OffersScreen;

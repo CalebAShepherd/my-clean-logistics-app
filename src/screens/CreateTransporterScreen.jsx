@@ -94,5 +94,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, marginBottom: 16, textAlign: 'center' },
   input: { borderWidth: 1, borderColor: '#ccc', marginBottom: 12, padding: 8, borderRadius: 4 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-}); 
+});
 //export default withScreenLayout(CreateTransporterScreen, { title: 'CreateTransporter' });
+export default CreateTransporterScreen;

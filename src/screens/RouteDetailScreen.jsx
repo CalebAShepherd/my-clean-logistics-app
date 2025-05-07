@@ -110,3 +110,4 @@ const styles = StyleSheet.create({
   shipmentTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 4 },
 }); 
 // export default withScreenLayout(RouteDetailScreen, { title: 'RouteDetail' });
+export default RouteDetailScreen;

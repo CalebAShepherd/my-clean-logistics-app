@@ -59,3 +59,4 @@ const styles = StyleSheet.create({
   title: { fontWeight: 'bold' },
 }); 
 // export default withScreenLayout(InventoryManagementScreen, { title: 'InventoryManagement' });
+export default InventoryManagementScreen;

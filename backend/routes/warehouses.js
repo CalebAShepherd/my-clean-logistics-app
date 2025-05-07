@@ -14,7 +14,7 @@ const {
 router.get(
   '/',
   requireAuth,
-  requireRole(['admin','dispatcher']),
+  requireRole(['admin','dispatcher', 'warehouse_admin']),
   getWarehouses
 );
 
@@ -22,7 +22,7 @@ router.get(
 router.post(
   '/',
   requireAuth,
-  requireRole('dev'),
+  requireRole('dev', 'admin', 'warehouse_admin'),
   createWarehouse
 );
 
@@ -30,7 +30,7 @@ router.post(
 router.delete(
   '/:id',
   requireAuth,
-  requireRole('dev'),
+  requireRole('dev', 'admin', 'warehouse_admin'),
   deleteWarehouse
 );
 

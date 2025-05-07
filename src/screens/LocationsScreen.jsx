@@ -98,5 +98,6 @@ const styles = StyleSheet.create({
   picker: { marginBottom: 16 },
   item: { padding: 12, backgroundColor: '#fff', borderRadius: 6 },
   sep: { height: 1, backgroundColor: '#eee', marginVertical: 4 },
-}); 
+});
 //  export default withScreenLayout(LocationsScreen, { title: 'Locations' });
+export default LocationsScreen;

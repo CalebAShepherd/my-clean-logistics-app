@@ -173,3 +173,4 @@ const styles = StyleSheet.create({
   footerContainer: { padding: 16 },
 }); 
 // export default withScreenLayout(RouteOptimizationScreen, { title: 'RouteOptimization' });
+export default RouteOptimizationScreen;

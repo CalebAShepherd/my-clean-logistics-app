@@ -62,3 +62,4 @@ const styles = StyleSheet.create({
   separator: { height: 12 },
 }); 
 // export default withScreenLayout(RoutesScreen, { title: 'Routes' });
+export default RoutesScreen;

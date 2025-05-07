@@ -85,3 +85,4 @@ const styles = StyleSheet.create({
   analyticsText: { fontSize: 16, marginLeft: 8 },
 }); 
 // export default withScreenLayout(DispatcherDashboardScreen, { title: 'DispatcherDashboard' });
+export default DispatcherDashboardScreen;

@@ -9,7 +9,7 @@ const API_URL = Platform.OS === 'android'
   ? 'http://10.0.2.2:3000'
   : 'http://192.168.0.73:3000';
 
-function ShipmentList({ status, shipments, onRefresh, userToken, fetching }) {
+function ShipmentList({ status, shipments, onRefresh, userToken, fetching, settings }) {
   const navigation = useNavigation();
   // Normalize and filter; log each comparison
   const filtered = shipments.filter(s => {
@@ -177,6 +177,7 @@ export default function ShipmentsScreen() {
         onRefresh={fetchAllShipments}
         userToken={userToken}
         fetching={fetching}
+        settings={settings}
       />
     </>
   );

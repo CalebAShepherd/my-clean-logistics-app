@@ -108,3 +108,4 @@ const styles = StyleSheet.create({
   deleteBtn: { marginTop: 16 }
 }); 
 // export default withScreenLayout(InventoryItemDetailScreen, { title: 'InventoryItemDetail' });
+export default InventoryItemDetailScreen;

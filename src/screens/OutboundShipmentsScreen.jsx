@@ -123,3 +123,4 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#ccc', padding: 8, marginVertical: 8, borderRadius: 4 },
 }); 
 // export default withScreenLayout(OutboundShipmentsScreen, { title: 'OutboundShipments' });
+export default OutboundShipmentsScreen;

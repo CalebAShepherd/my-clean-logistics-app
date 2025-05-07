@@ -81,3 +81,4 @@ const styles = StyleSheet.create({
   picker: { marginVertical: 8 },
 }); 
 // export default withScreenLayout(CreateLocationScreen, { title: 'CreateLocation' });
+export default CreateLocationScreen;

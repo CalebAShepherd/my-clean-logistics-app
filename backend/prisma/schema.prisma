@@ -1,69 +1,240 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-}
-
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  username  String   @unique
-  password  String
-  role      Role
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  clientShipments     Shipment[] @relation("ClientShipments")
-  dispatcherShipments Shipment[] @relation("DispatcherShipments")
-  carrierShipments    Shipment[] @relation("CarrierShipments")
+  id                                    String         @id @default(uuid())
+  email                                 String         @unique
+  password                              String
+  role                                  Role
+  createdAt                             DateTime       @default(now())
+  updatedAt                             DateTime       @updatedAt
+  username                              String         @unique
+  phone                                 String?
+  DockSchedule                          DockSchedule[]
+  Offer                                 Offer[]
+  Route                                 Route[]
+  carrierShipments                      Shipment[]     @relation("CarrierShipments")
+  clientShipments                       Shipment[]     @relation("ClientShipments")
+  dispatcherShipments                   Shipment[]     @relation("DispatcherShipments")
+  Shipment_Shipment_transporterIdToUser Shipment[]     @relation("Shipment_transporterIdToUser")
 }
 
 model Shipment {
-  id           String   @id @default(uuid())
-  clientId     String
-  client       User     @relation("ClientShipments", fields: [clientId], references: [id])
-  dispatcherId String?
-  carrierId    String?
-  status       ShipmentStatus @default(CREATED)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  origin               String
-  destination          String
-  description          String? 
-  weight               Float
-  pickupName           String
-  pickupPhone          String
-  pickupEmail          String
-  deliveryName         String
-  deliveryPhone        String
-  deliveryEmail        String
-  shipmentDate         DateTime
-  length               Float
-  width                Float
-  height               Float
-  quantity             Int
-  specialInstructions  String?
-  insurance            Boolean
-  reference            String?
-  dispatcher User? @relation("DispatcherShipments", fields: [dispatcherId], references: [id])
-  carrier    User? @relation("CarrierShipments", fields: [carrierId], references: [id])
-
-  // Link to a service carrier (UPS, FedEx, DHL, etc.)
-  serviceCarrierId     String?  
-  serviceCarrier       Carrier? @relation("ServiceCarrierShipments", fields: [serviceCarrierId], references: [id])
-  trackingNumber       String?
+  id                                String          @id @default(uuid())
+  clientId                          String
+  dispatcherId                      String?
+  carrierId                         String?
+  status                            ShipmentStatus  @default(CREATED)
+  createdAt                         DateTime        @default(now())
+  updatedAt                         DateTime        @updatedAt
+  deliveryEmail                     String
+  deliveryName                      String
+  deliveryPhone                     String
+  description                       String?
+  destination                       String
+  height                            Float
+  insurance                         Boolean
+  length                            Float
+  origin                            String
+  pickupEmail                       String
+  pickupName                        String
+  pickupPhone                       String
+  quantity                          Int
+  reference                         String?
+  shipmentDate                      DateTime
+  specialInstructions               String?
+  weight                            Float
+  width                             Float
+  serviceCarrierId                  String?
+  trackingNumber                    String?
+  transporterId                     String?
+  destinationLat                    Float?
+  destinationLng                    Float?
+  originLat                         Float?
+  originLng                         Float?
+  deliveredAt                       DateTime?
+  DockSchedule                      DockSchedule[]
+  RouteShipment                     RouteShipment[]
+  carrier                           User?           @relation("CarrierShipments", fields: [carrierId], references: [id])
+  client                            User            @relation("ClientShipments", fields: [clientId], references: [id])
+  dispatcher                        User?           @relation("DispatcherShipments", fields: [dispatcherId], references: [id])
+  serviceCarrier                    Carrier?        @relation("ServiceCarrierShipments", fields: [serviceCarrierId], references: [id])
+  User_Shipment_transporterIdToUser User?           @relation("Shipment_transporterIdToUser", fields: [transporterId], references: [id])
 }
 
-// Third-party carriers (UPS, FedEx, etc.)
 model Carrier {
-  id         String     @id @default(uuid())
-  name       String
-  code       String     @unique
-  apiKey     String?
-  apiSecret  String?
-  shipments  Shipment[] @relation("ServiceCarrierShipments")
+  id        String     @id @default(uuid())
+  name      String
+  code      String     @unique
+  apiKey    String?
+  apiSecret String?
+  shipments Shipment[] @relation("ServiceCarrierShipments")
+}
+
+model CompanySettings {
+  id                         String   @id @default(uuid())
+  companyName                String?
+  logoUrl                    String?
+  hasWarehouses              Boolean  @default(false)
+  ownTransporters            Boolean  @default(false)
+  useThirdPartyCarriers      Boolean  @default(true)
+  enableTrackingInput        Boolean  @default(true)
+  enableAddressValidation    Boolean  @default(true)
+  enableRateQuotes           Boolean  @default(true)
+  enablePickups              Boolean  @default(true)
+  enableNotifications        Boolean  @default(true)
+  enableDevTools             Boolean  @default(false)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  googleApiKey               String?
+  useGoogleRouteOptimization Boolean  @default(false)
+}
+
+model Warehouse {
+  id                                                     String          @id @default(uuid())
+  name                                                   String
+  address                                                String
+  createdAt                                              DateTime        @default(now())
+  updatedAt                                              DateTime        @updatedAt
+  DamageReport                                           DamageReport[]
+  DockSchedule                                           DockSchedule[]
+  Location                                               Location[]
+  StockMovement                                          StockMovement[]
+  TransferOrder_TransferOrder_fromWarehouseIdToWarehouse TransferOrder[] @relation("TransferOrder_fromWarehouseIdToWarehouse")
+  TransferOrder_TransferOrder_toWarehouseIdToWarehouse   TransferOrder[] @relation("TransferOrder_toWarehouseIdToWarehouse")
+  WarehouseItem                                          WarehouseItem[]
+}
+
+model DamageReport {
+  id            String        @id
+  warehouseId   String
+  itemId        String
+  quantity      Int
+  description   String?
+  reportedAt    DateTime      @default(now())
+  InventoryItem InventoryItem @relation(fields: [itemId], references: [id])
+  Warehouse     Warehouse     @relation(fields: [warehouseId], references: [id])
+}
+
+model DockSchedule {
+  id                 String     @id
+  warehouseId        String
+  transporterId      String?
+  shipmentId         String?
+  scheduledArrival   DateTime
+  scheduledDeparture DateTime?
+  status             DockStatus @default(PENDING)
+  notes              String?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime
+  Shipment           Shipment?  @relation(fields: [shipmentId], references: [id])
+  User               User?      @relation(fields: [transporterId], references: [id])
+  Warehouse          Warehouse  @relation(fields: [warehouseId], references: [id])
+}
+
+model InventoryItem {
+  id            String          @id
+  sku           String          @unique
+  name          String
+  description   String?
+  unit          String
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime
+  DamageReport  DamageReport[]
+  StockMovement StockMovement[]
+  TransferOrder TransferOrder[]
+  WarehouseItem WarehouseItem[]
+}
+
+model Location {
+  id            String          @id
+  warehouseId   String
+  zone          String
+  shelf         String
+  bin           String
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime
+  Warehouse     Warehouse       @relation(fields: [warehouseId], references: [id])
+  WarehouseItem WarehouseItem[]
+}
+
+model Offer {
+  id            String      @id
+  routeId       String
+  transporterId String
+  status        OfferStatus @default(pending)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime
+  Route         Route       @relation(fields: [routeId], references: [id])
+  User          User        @relation(fields: [transporterId], references: [id])
+}
+
+model Route {
+  id            String          @id
+  transporterId String
+  geometry      String
+  createdAt     DateTime        @default(now())
+  Offer         Offer[]
+  User          User            @relation(fields: [transporterId], references: [id])
+  RouteShipment RouteShipment[]
+}
+
+model RouteShipment {
+  routeId    String
+  shipmentId String
+  order      Int
+  Route      Route    @relation(fields: [routeId], references: [id])
+  Shipment   Shipment @relation(fields: [shipmentId], references: [id])
+
+  @@id([routeId, shipmentId])
+}
+
+model StockMovement {
+  id            String        @id
+  warehouseId   String
+  itemId        String
+  type          MovementType  @default(INBOUND)
+  quantity      Int
+  relatedId     String?
+  timestamp     DateTime      @default(now())
+  notes         String?
+  InventoryItem InventoryItem @relation(fields: [itemId], references: [id])
+  Warehouse     Warehouse     @relation(fields: [warehouseId], references: [id])
+}
+
+model TransferOrder {
+  id                                                 String         @id
+  fromWarehouseId                                    String
+  toWarehouseId                                      String
+  itemId                                             String
+  quantity                                           Int
+  status                                             TransferStatus @default(PENDING)
+  createdAt                                          DateTime       @default(now())
+  updatedAt                                          DateTime       @default(now())
+  Warehouse_TransferOrder_fromWarehouseIdToWarehouse Warehouse      @relation("TransferOrder_fromWarehouseIdToWarehouse", fields: [fromWarehouseId], references: [id])
+  InventoryItem                                      InventoryItem  @relation(fields: [itemId], references: [id])
+  Warehouse_TransferOrder_toWarehouseIdToWarehouse   Warehouse      @relation("TransferOrder_toWarehouseIdToWarehouse", fields: [toWarehouseId], references: [id])
+}
+
+model WarehouseItem {
+  warehouseId   String
+  itemId        String
+  locationId    String?
+  quantity      Int           @default(0)
+  minThreshold  Int           @default(0)
+  maxThreshold  Int?
+  expiresAt     DateTime?
+  InventoryItem InventoryItem @relation(fields: [itemId], references: [id])
+  Location      Location?     @relation(fields: [locationId], references: [id])
+  Warehouse     Warehouse     @relation(fields: [warehouseId], references: [id])
+
+  @@id([warehouseId, itemId])
 }
 
 enum Role {
@@ -72,6 +243,8 @@ enum Role {
   dispatcher
   carrier
   dev
+  transporter
+  warehouse_admin
 }
 
 enum ShipmentStatus {
@@ -81,28 +254,31 @@ enum ShipmentStatus {
   DELIVERED
 }
 
-// Application-wide feature flags and branding
-model CompanySettings {
-  id                    String   @id @default(uuid())
-  companyName           String?
-  logoUrl               String?
-  hasWarehouses         Boolean  @default(false)
-  ownTransporters       Boolean  @default(false)
-  useThirdPartyCarriers Boolean  @default(true)
-  enableTrackingInput   Boolean  @default(true)
-  enableAddressValidation Boolean @default(true)
-  enableRateQuotes      Boolean  @default(true)
-  enablePickups         Boolean  @default(true)
-  enableNotifications   Boolean  @default(true)
-  enableDevTools        Boolean  @default(false)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+enum DockStatus {
+  PENDING
+  ARRIVED
+  DEPARTED
+  CANCELLED
 }
 
-model Warehouse {
-  id        String   @id @default(uuid())
-  name      String
-  address   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+enum MovementType {
+  INBOUND
+  OUTBOUND
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADJUSTMENT
+  DAMAGE
+  RETURN
+}
+
+enum OfferStatus {
+  pending
+  accepted
+  declined
+}
+
+enum TransferStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
 }
