@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
  */
 exports.getInventoryItems = async (req, res) => {
   try {
-    const items = await prisma.inventoryItem.findMany();
+    const items = await prisma.inventoryItem.findMany({ include: { supplier: true } });
     return res.json(items);
   } catch (err) {
     console.error('Error fetching inventory items:', err);
@@ -20,7 +20,7 @@ exports.getInventoryItems = async (req, res) => {
 exports.getInventoryItem = async (req, res) => {
   try {
     const { id } = req.params;
-    const item = await prisma.inventoryItem.findUnique({ where: { id } });
+    const item = await prisma.inventoryItem.findUnique({ where: { id }, include: { supplier: true } });
     if (!item) {
       return res.status(404).json({ error: 'Not found' });
     }
@@ -36,12 +36,12 @@ exports.getInventoryItem = async (req, res) => {
  */
 exports.createInventoryItem = async (req, res) => {
   try {
-    const { sku, name, description, unit } = req.body;
+    const { sku, name, description, unit, supplierId } = req.body;
     if (!sku || !name || !unit) {
       return res.status(400).json({ error: 'SKU, name, and unit are required' });
     }
     const newItem = await prisma.inventoryItem.create({
-      data: { sku, name, description, unit },
+      data: { sku, name, description, unit, supplierId },
     });
     return res.status(201).json(newItem);
   } catch (err) {
@@ -56,10 +56,10 @@ exports.createInventoryItem = async (req, res) => {
 exports.updateInventoryItem = async (req, res) => {
   try {
     const { id } = req.params;
-    const { sku, name, description, unit } = req.body;
+    const { sku, name, description, unit, supplierId } = req.body;
     const updatedItem = await prisma.inventoryItem.update({
       where: { id },
-      data: { sku, name, description, unit },
+      data: { sku, name, description, unit, supplierId },
     });
     return res.json(updatedItem);
   } catch (err) {

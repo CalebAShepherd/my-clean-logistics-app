@@ -46,11 +46,67 @@ exports.createTransferOrder = async (req, res) => {
     if (!fromWarehouseId || !toWarehouseId || !itemId || quantity == null) {
       return res.status(400).json({ error: 'fromWarehouseId, toWarehouseId, itemId, and quantity are required' });
     }
-    const newOrder = await prisma.transferOrder.create({
-      data: { fromWarehouseId, toWarehouseId, itemId, quantity }
+    const result = await prisma.$transaction(async (tx) => {
+      // Create transfer order in pending status
+      const order = await tx.transferOrder.create({
+        data: { fromWarehouseId, toWarehouseId, itemId, quantity, status: 'PENDING' }
+      });
+      // Check source stock
+      const sourceItem = await tx.warehouseItem.findUnique({
+        where: { warehouseId_itemId: { warehouseId: fromWarehouseId, itemId } }
+      });
+      if (!sourceItem || sourceItem.quantity < quantity) {
+        throw new Error('Insufficient stock in source warehouse');
+      }
+      // Deduct from source
+      await tx.warehouseItem.update({
+        where: { warehouseId_itemId: { warehouseId: fromWarehouseId, itemId } },
+        data: { quantity: sourceItem.quantity - quantity }
+      });
+      await tx.stockMovement.create({
+        data: {
+          warehouseId: fromWarehouseId,
+          itemId,
+          type: 'TRANSFER_OUT',
+          quantity,
+          relatedId: order.id
+        }
+      });
+      // Add to destination
+      let destItem = await tx.warehouseItem.findUnique({
+        where: { warehouseId_itemId: { warehouseId: toWarehouseId, itemId } }
+      });
+      if (!destItem) {
+        destItem = await tx.warehouseItem.create({
+          data: { warehouseId: toWarehouseId, itemId, quantity }
+        });
+      } else {
+        await tx.warehouseItem.update({
+          where: { warehouseId_itemId: { warehouseId: toWarehouseId, itemId } },
+          data: { quantity: destItem.quantity + quantity }
+        });
+      }
+      await tx.stockMovement.create({
+        data: {
+          warehouseId: toWarehouseId,
+          itemId,
+          type: 'TRANSFER_IN',
+          quantity,
+          relatedId: order.id
+        }
+      });
+      // Update order status to COMPLETED
+      const completedOrder = await tx.transferOrder.update({
+        where: { id: order.id },
+        data: { status: 'COMPLETED' }
+      });
+      return completedOrder;
     });
-    return res.status(201).json(newOrder);
+    return res.status(201).json(result);
   } catch (err) {
+    if (err.message === 'Insufficient stock in source warehouse') {
+      return res.status(400).json({ error: err.message });
+    }
     console.error('Error creating transfer order:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }

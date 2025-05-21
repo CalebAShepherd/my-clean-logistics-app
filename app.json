@@ -14,7 +14,17 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.cashep.my-clean-logistics-app"
+      "bundleIdentifier": "com.cashep.my-clean-logistics-app",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSExceptionDomains": {
+            "192.168.0.73": {
+              "NSExceptionAllowsInsecureHTTPLoads": true,
+              "NSIncludesSubdomains": true
+            }
+          }
+        }
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -22,6 +32,9 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.cashep.mycleanlogisticsapp"
+    },
+    "extra": {
+      "apiUrl": "http://192.168.0.73:3000"
     },
     "web": {
       "favicon": "./assets/images/favicon.png"

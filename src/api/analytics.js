@@ -31,6 +31,17 @@ export async function fetchCompletedCount(token, start, end) {
 }
 
 /**
+ * Fetch count of shipments currently in transit
+ */
+export async function fetchInTransitCount(token) {
+  const res = await fetch(`${API_URL}/analytics/in-transit`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Error fetching in-transit count: ${res.status}`);
+  return res.json();
+}
+
+/**
  * Fetch delivery volume trends
  * @param {'day'|'week'|'month'} period grouping
  */
@@ -43,5 +54,37 @@ export async function fetchDeliveryTrends(token, start, end, period = 'day') {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Error fetching trends: ${res.status}`);
+  return res.json();
+}
+
+/**
+ * Fetch delivery volume forecast along with trends
+ */
+export async function fetchForecast(token, start, end, period = 'day', method = 'sma', window = 3) {
+  const params = new URLSearchParams();
+  if (start) params.append('start', start.toISOString());
+  if (end) params.append('end', end.toISOString());
+  if (period) params.append('period', period);
+  if (method) params.append('method', method);
+  if (window) params.append('window', window);
+  const res = await fetch(`${API_URL}/analytics/deliveries/forecast?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Error fetching forecast: ${res.status}`);
+  return res.json();
+}
+
+/**
+ * Fetch delivery anomalies (transit times > sigma stddev above mean)
+ */
+export async function fetchDeliveryAnomalies(token, start, end, sigma = 2) {
+  const params = new URLSearchParams();
+  if (start) params.append('start', start.toISOString());
+  if (end) params.append('end', end.toISOString());
+  params.append('sigma', sigma);
+  const res = await fetch(`${API_URL}/analytics/deliveries/anomalies?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Error fetching anomalies: ${res.status}`);
   return res.json();
 } 

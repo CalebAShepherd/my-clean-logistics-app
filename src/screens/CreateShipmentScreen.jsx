@@ -1,16 +1,18 @@
-
-
 import React, { useState, useContext } from 'react';
 import { View, Text, TextInput, Button, StyleSheet, Alert, Platform, ScrollView, Switch, KeyboardAvoidingView } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { AuthContext } from '../context/AuthContext';
+import { SafeAreaView } from 'react-native';
+import InternalHeader from '../components/InternalHeader';
+import { useSettings } from '../context/SettingsContext';
 
 const API_URL = Platform.OS === 'android'
   ? 'http://10.0.2.2:3000'
   : 'http://192.168.0.73:3000';
 
-export default function CreateShipmentScreen() {
+export default function CreateShipmentScreen({ navigation }) {
   const { userToken } = useContext(AuthContext);
+  const { settings } = useSettings();
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
   const [description, setDescription] = useState('');
@@ -25,12 +27,23 @@ export default function CreateShipmentScreen() {
   const [dateTime, setDateTime] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [quantity, setQuantity] = useState('');
+  const [palletCount, setPalletCount] = useState('');
   const [lengthFt, setLengthFt] = useState('');
   const [widthFt, setWidthFt] = useState('');
   const [heightFt, setHeightFt] = useState('');
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [insurance, setInsurance] = useState(false);
+  const [hazmat, setHazmat] = useState(false);
   const [reference, setReference] = useState('');
+
+  const [pickupStreet, setPickupStreet] = useState('');
+  const [pickupCity, setPickupCity] = useState('');
+  const [pickupState, setPickupState] = useState('');
+  const [pickupZip, setPickupZip] = useState('');
+  const [deliveryStreet, setDeliveryStreet] = useState('');
+  const [deliveryCity, setDeliveryCity] = useState('');
+  const [deliveryState, setDeliveryState] = useState('');
+  const [deliveryZip, setDeliveryZip] = useState('');
 
   const onChangeDateTime = (event, selectedDate) => {
     setShowDatePicker(false);
@@ -39,11 +52,41 @@ export default function CreateShipmentScreen() {
     }
   };
 
+  const validateAddresses = async () => {
+    if (!settings.googleApiKey) throw new Error('Google API Key not configured');
+    const geocode = async (address) => {
+      const res = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${settings.googleApiKey}`
+      );
+      const data = await res.json();
+      if (data.status !== 'OK' || !data.results.length) {
+        throw new Error(`Invalid address: ${address}`);
+      }
+      return data.results[0];
+    };
+    await geocode(`${pickupStreet}, ${pickupCity}, ${pickupState} ${pickupZip}`);
+    await geocode(`${deliveryStreet}, ${deliveryCity}, ${deliveryState} ${deliveryZip}`);
+  };
+
   const handleSubmit = async () => {
+    if (settings.enableAddressValidation) {
+      try {
+        await validateAddresses();
+      } catch (e) {
+        Alert.alert('Address Validation Error', e.message);
+        return;
+      }
+    }
     // Validate required fields
     const requiredFields = [
-      [origin, 'Origin Address'],
-      [destination, 'Destination Address'],
+      [pickupStreet, 'Pickup Street'],
+      [pickupCity, 'Pickup City'],
+      [pickupState, 'Pickup State'],
+      [pickupZip, 'Pickup Zip'],
+      [deliveryStreet, 'Delivery Street'],
+      [deliveryCity, 'Delivery City'],
+      [deliveryState, 'Delivery State'],
+      [deliveryZip, 'Delivery Zip'],
       [weight, 'Weight'],
       [pickupName, 'Pickup Name'],
       [pickupPhone, 'Pickup Phone'],
@@ -52,10 +95,10 @@ export default function CreateShipmentScreen() {
       [deliveryPhone, 'Delivery Phone'],
       [deliveryEmail, 'Delivery Email'],
       [quantity, 'Quantity'],
+      [palletCount, 'Pallet Count'],
       [lengthFt, 'Length'],
       [widthFt, 'Width'],
       [heightFt, 'Height'],
-      // Reference / PO # is now optional
     ];
     for (let [value, label] of requiredFields) {
       if (!value || (typeof value === 'string' && !value.trim())) {
@@ -64,37 +107,43 @@ export default function CreateShipmentScreen() {
       }
     }
     try {
-      const res = await fetch(`${API_URL}/shipments`, {
+      const res = await fetch(`${API_URL}/api/shipments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${userToken}`,
         },
         body: JSON.stringify({
-          origin,
-          destination,
           description,
           weight: parseFloat(weight),
+          hazmat,
           pickup: { name: pickupName, phone: pickupPhone, email: pickupEmail },
           delivery: { name: deliveryName, phone: deliveryPhone, email: deliveryEmail },
-          shipmentDate: dateTime.toISOString(),
+          shipmentDate: settings.enablePickups ? dateTime.toISOString() : new Date().toISOString(),
           dimensions: {
             length: parseFloat(lengthFt),
             width: parseFloat(widthFt),
             height: parseFloat(heightFt),
           },
+          palletCount: parseInt(palletCount, 10),
           quantity: parseInt(quantity, 10),
           specialInstructions,
           insurance,
           reference,
+          pickupStreet,
+          pickupCity,
+          pickupState,
+          pickupZip,
+          deliveryStreet,
+          deliveryCity,
+          deliveryState,
+          deliveryZip,
         }),
       });
       if (!res.ok) {
         throw new Error('Failed to create shipment');
       }
       Alert.alert('Success', 'Shipment request submitted for approval.');
-      setOrigin('');
-      setDestination('');
       setDescription('');
       setWeight('');
       setPickupName('');
@@ -105,12 +154,22 @@ export default function CreateShipmentScreen() {
       setDeliveryEmail('');
       setDateTime(new Date());
       setQuantity('');
+      setPalletCount('');
       setLengthFt('');
       setWidthFt('');
       setHeightFt('');
       setSpecialInstructions('');
       setInsurance(false);
+      setHazmat(false);
       setReference('');
+      setPickupStreet('');
+      setPickupCity('');
+      setPickupState('');
+      setPickupZip('');
+      setDeliveryStreet('');
+      setDeliveryCity('');
+      setDeliveryState('');
+      setDeliveryZip('');
     } catch (e) {
       console.error(e);
       Alert.alert('Error', e.message);
@@ -118,6 +177,8 @@ export default function CreateShipmentScreen() {
   };
 
   return (
+    <SafeAreaView style={{ flex: 1 }}>
+      <InternalHeader navigation={navigation} title="New Shipment Request" />
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -125,18 +186,16 @@ export default function CreateShipmentScreen() {
     >
       <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>New Shipment Request</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Origin Address *"
-        value={origin}
-        onChangeText={setOrigin}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Destination Address *"
-        value={destination}
-        onChangeText={setDestination}
-      />
+      <Text style={styles.label}>Pickup Address</Text>
+      <TextInput style={styles.input} placeholder="Pickup Street *" value={pickupStreet} onChangeText={setPickupStreet} />
+      <TextInput style={styles.input} placeholder="Pickup City *" value={pickupCity} onChangeText={setPickupCity} />
+      <TextInput style={styles.input} placeholder="Pickup State *" value={pickupState} onChangeText={setPickupState} />
+      <TextInput style={styles.input} placeholder="Pickup Zip *" value={pickupZip} onChangeText={setPickupZip} keyboardType="numeric" />
+      <Text style={styles.label}>Delivery Address</Text>
+      <TextInput style={styles.input} placeholder="Delivery Street *" value={deliveryStreet} onChangeText={setDeliveryStreet} />
+      <TextInput style={styles.input} placeholder="Delivery City *" value={deliveryCity} onChangeText={setDeliveryCity} />
+      <TextInput style={styles.input} placeholder="Delivery State *" value={deliveryState} onChangeText={setDeliveryState} />
+      <TextInput style={styles.input} placeholder="Delivery Zip *" value={deliveryZip} onChangeText={setDeliveryZip} keyboardType="numeric" />
       <TextInput
         style={styles.input}
         placeholder="Description (optional)"
@@ -192,17 +251,22 @@ export default function CreateShipmentScreen() {
         onChangeText={setDeliveryEmail}
         keyboardType="email-address"
       />
-      <Button title="Select Date & Time" onPress={() => setShowDatePicker(true)} />
-      <Text style={{ marginBottom: 8, marginTop: 4, textAlign: 'center' }}>
-        {dateTime ? dateTime.toLocaleString() : ''}
-      </Text>
-      {showDatePicker && (
-        <DateTimePicker
-          value={dateTime}
-          mode="datetime"
-          display="default"
-          onChange={onChangeDateTime}
-        />
+      {/* Pickup Scheduling */}
+      {settings.enablePickups && (
+        <>
+          <Button title="Select Date & Time" onPress={() => setShowDatePicker(true)} />
+          <Text style={{ marginBottom: 8, marginTop: 4, textAlign: 'center' }}>
+            {dateTime ? dateTime.toLocaleString() : ''}
+          </Text>
+          {showDatePicker && (
+            <DateTimePicker
+              value={dateTime}
+              mode="datetime"
+              display="default"
+              onChange={onChangeDateTime}
+            />
+          )}
+        </>
       )}
       <Text style={styles.label}>Dimensions (ft)</Text>
       <TextInput
@@ -228,6 +292,13 @@ export default function CreateShipmentScreen() {
       />
       <TextInput
         style={styles.input}
+        placeholder="Pallet Count *"
+        value={palletCount}
+        onChangeText={setPalletCount}
+        keyboardType="numeric"
+      />
+      <TextInput
+        style={styles.input}
         placeholder="Quantity *"
         value={quantity}
         onChangeText={setQuantity}
@@ -245,6 +316,10 @@ export default function CreateShipmentScreen() {
         <Text style={{ flex: 1 }}>Insurance</Text>
         <Switch value={insurance} onValueChange={setInsurance} />
       </View>
+      <View style={styles.row}>
+        <Text style={{ flex: 1 }}>Hazardous Material</Text>
+        <Switch value={hazmat} onValueChange={setHazmat} />
+      </View>
       <TextInput
         style={styles.input}
         placeholder="Reference / PO # (optional)"
@@ -254,6 +329,7 @@ export default function CreateShipmentScreen() {
       <Button title="Submit Request" onPress={handleSubmit} />
     </ScrollView>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

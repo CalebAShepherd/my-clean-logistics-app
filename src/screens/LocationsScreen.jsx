@@ -6,6 +6,8 @@ import { AuthContext } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { fetchWarehouses } from '../api/warehouses';
 import { fetchLocations } from '../api/locations';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import InternalHeader from '../components/InternalHeader';
 
 function LocationsScreen({ navigation }) {
   const { userToken } = useContext(AuthContext);
@@ -63,7 +65,8 @@ function LocationsScreen({ navigation }) {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <InternalHeader navigation={navigation} title="Locations" />
       <Text style={styles.label}>Select Warehouse</Text>
       <Picker
         selectedValue={currentWarehouse}
@@ -87,7 +90,7 @@ function LocationsScreen({ navigation }) {
         )}
         ItemSeparatorComponent={() => <View style={styles.sep} />}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

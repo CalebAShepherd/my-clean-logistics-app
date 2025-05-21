@@ -1,11 +1,14 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
+import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { AuthContext } from './AuthContext';
 
+// Determine correct host for Android emulator vs. network development
+const fallbackUrl = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://192.168.0.73:3000';
 const API_URL =
   Constants.manifest?.extra?.apiUrl ||
   Constants.expoConfig?.extra?.apiUrl ||
-  'http://192.168.0.73:3000';
+  fallbackUrl;
 
 const SettingsContext = createContext({
   settings: null,

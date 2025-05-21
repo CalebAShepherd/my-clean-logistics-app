@@ -14,6 +14,14 @@ function parseJwt(token) {
   }
 }
 
+// Helper to check if JWT is expired
+function isTokenExpired(token) {
+  const decoded = parseJwt(token);
+  if (!decoded || !decoded.exp) return true;
+  // exp is in seconds since epoch
+  return Date.now() >= decoded.exp * 1000;
+}
+
 export const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
@@ -50,8 +58,13 @@ export function AuthProvider({ children }) {
     const loadToken = async () => {
       try {
         const token = await AsyncStorage.getItem('userToken');
-        setUserToken(token);
-        if (token) {
+        if (token && isTokenExpired(token)) {
+          // Token expired, remove it
+          await AsyncStorage.removeItem('userToken');
+          setUserToken(null);
+          setUser(null);
+        } else if (token) {
+          setUserToken(token);
           const decoded = parseJwt(token);
           setUser({ id: decoded.userId, role: decoded.role });
         }

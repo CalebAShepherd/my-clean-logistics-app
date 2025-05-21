@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useContext } from 'react';
+import { SafeAreaView } from 'react-native';
 import { View, Text, FlatList, TextInput, Button, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import Constants from 'expo-constants';
+import InternalHeader from '../components/InternalHeader';
 // Read API URL from expo config or fallback
 const API_URL =
   Constants.manifest?.extra?.apiUrl ||
   Constants.expoConfig?.extra?.apiUrl ||
   'http://192.168.0.73:3000';
 
-export default function AdminCarriersScreen() {
+export default function AdminCarriersScreen({ navigation }) {
   const { userToken } = useContext(AuthContext);
   const [carriers, setCarriers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -103,7 +105,8 @@ export default function AdminCarriersScreen() {
   if (loading) return <ActivityIndicator style={styles.center} size="large" />;
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <InternalHeader navigation={navigation} title="Admin Carriers" />
       <FlatList
         data={carriers}
         keyExtractor={item => item.id}
@@ -164,7 +167,7 @@ export default function AdminCarriersScreen() {
         />
         <Button title="Create Carrier" onPress={createCarrier} />
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 

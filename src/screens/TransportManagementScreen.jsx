@@ -1,21 +1,23 @@
 //import withScreenLayout from '../components/withScreenLayout';
 import React, { useContext } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
+import InternalHeader from '../components/InternalHeader';
 
 function TransportManagementScreen({ navigation }) {
   const { user } = useContext(AuthContext);
   const role = user?.role;
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Transport Management</Text>
+    <SafeAreaView style={styles.container}>
+      <InternalHeader navigation={navigation} title="Transport Management" />
+      
       <View style={styles.grid}>
         {['admin', 'dispatcher'].includes(role) && (
           <>
             <TouchableOpacity
               style={styles.card}
-              onPress={() => navigation.navigate('Manage Transporters')}
+              onPress={() => navigation.navigate('Drivers')}
             >
               <MaterialCommunityIcons name="account-group" size={40} />
               <Text style={styles.cardText}>Manage Transporters</Text>
@@ -38,8 +40,8 @@ function TransportManagementScreen({ navigation }) {
               style={styles.card}
               onPress={() => navigation.navigate('Route Optimization')}
             >
-              <MaterialCommunityIcons name="history" size={40} />
-              <Text style={styles.cardText}>Route Optimization & History</Text>
+              <MaterialCommunityIcons name="directions" size={40} />
+              <Text style={styles.cardText}>Route Optimization</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.card}
@@ -55,26 +57,16 @@ function TransportManagementScreen({ navigation }) {
               <MaterialCommunityIcons name="file-document" size={40} />
               <Text style={styles.cardText}>Transporter Documents</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.card}
-              onPress={() => navigation.navigate('Analytics')}
-            >
-              <MaterialCommunityIcons name="chart-line" size={40} />
-              <Text style={styles.cardText}>Analytics & Reports</Text>
-            </TouchableOpacity>
           </>
         )}
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    padding: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 16
   },  
   title: {
     fontSize: 24,
@@ -84,11 +76,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
+    alignItems: 'center',
     gap: 16,
+    marginTop: 16
   },  
   card: {
-    width: 120,
+    width: 172,
     height: 120,
+    flex: 0,
     backgroundColor: '#ffffff',
     shadowColor: '#171717',
     shadowOffset: {width: -2, height: 2},
@@ -97,7 +92,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    margin: 8,
     padding: 6,
   },  
   cardText: {

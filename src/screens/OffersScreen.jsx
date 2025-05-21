@@ -3,6 +3,9 @@ import React, { useEffect, useState, useContext } from 'react';
 import { View, Text, FlatList, ActivityIndicator, StyleSheet, TouchableOpacity, Button, Alert } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import { listOffers, updateOffer } from '../api/offers';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import InternalHeader from '../components/InternalHeader';
 
 function OffersScreen({ navigation }) {
   const { userToken } = useContext(AuthContext);
@@ -32,7 +35,8 @@ function OffersScreen({ navigation }) {
       // Remove or update the offer in the list
       setOffers(prev => prev.filter(o => o.id !== offerId));
       if (status === 'accepted') {
-        navigation.navigate('RouteDetail', { routeId: offers.find(o => o.id === offerId).route.id });
+        const offer = offers.find(o => o.id === offerId);
+        navigation.navigate('RouteDetail', { routeId: offer?.Route?.id });
       }
     } catch (e) {
       console.error('Error updating offer:', e);
@@ -47,40 +51,55 @@ function OffersScreen({ navigation }) {
   }
 
   if (offers.length === 0) {
-    return <View style={styles.center}><Text>No pending offers.</Text></View>;
+    return (
+      <SafeAreaView style={styles.container}>
+        <InternalHeader navigation={navigation} title="Offers" />
+        <View style={styles.center}>
+          <Text>No pending offers.</Text>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <InternalHeader navigation={navigation} title="Offers" />
       <FlatList
         data={offers}
         keyExtractor={item => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Text style={styles.title}>Route from {new Date(item.route.createdAt).toLocaleString()}</Text>
-            <Text>Stops: {item.route.shipments.length}</Text>
-            <View style={styles.buttons}>
-              <Button
-                title="Accept"
-                onPress={() => handleDecision(item.id, 'accepted')}
-                disabled={updatingId === item.id}
-              />
-              <Button
-                title="Decline"
-                onPress={() => handleDecision(item.id, 'declined')}
-                disabled={updatingId === item.id}
-              />
+        renderItem={({ item }) => {
+          const route = item.Route;
+          const createdAt = route?.createdAt ? new Date(route.createdAt).toLocaleString() : 'Unknown';
+          const stops = Array.isArray(route?.RouteShipment) ? route.RouteShipment.length : 0;
+          return (
+            <View style={styles.card}>
+              <Text style={styles.title}>Route from {createdAt}</Text>
+              <Text>Stops: {stops}</Text>
+              <View style={styles.buttons}>
+                <Button
+                  title="Accept"
+                  onPress={() => handleDecision(item.id, 'accepted')}
+                  disabled={updatingId === item.id}
+                />
+                <Button
+                  title="Decline"
+                  onPress={() => handleDecision(item.id, 'declined')}
+                  disabled={updatingId === item.id}
+                />
+              </View>
             </View>
-          </View>
-        )}
+          );
+        }}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
+  container: { flex: 1, padding: 16, backgroundColor: '#fff' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 16, borderBottomWidth: 1, borderColor: '#eee' },
+  headerTitle: { fontSize: 20, fontWeight: 'bold' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   card: { padding: 12, backgroundColor: '#fff', borderRadius: 6, elevation: 2 },
   title: { fontSize: 16, fontWeight: 'bold', marginBottom: 4 },

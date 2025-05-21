@@ -1,5 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
+const { sendNotification } = require('../services/notificationService');
 
 /**
  * List all stock movements, optionally filtered by warehouseId, itemId, or type
@@ -48,6 +49,29 @@ exports.createStockMovement = async (req, res) => {
     const newMovement = await prisma.stockMovement.create({
       data: { warehouseId, itemId, type, quantity, relatedId, notes }
     });
+    // Check inventory levels and notify if below threshold
+    try {
+      const warehouseItem = await prisma.warehouseItem.findUnique({
+        where: { warehouseId_itemId: { warehouseId: newMovement.warehouseId, itemId: newMovement.itemId } },
+        include: { InventoryItem: true }
+      });
+      if (warehouseItem && warehouseItem.quantity < warehouseItem.minThreshold) {
+        const admins = await prisma.user.findMany({
+          where: { warehouseId: newMovement.warehouseId, role: 'warehouse_admin' }
+        });
+        for (const admin of admins) {
+          await sendNotification({
+            userId: admin.id,
+            type: 'inventory_low',
+            title: `Low inventory for SKU ${warehouseItem.InventoryItem.sku}`,
+            message: `Current quantity is ${warehouseItem.quantity}`,
+            metadata: { warehouseId: newMovement.warehouseId, itemId: newMovement.itemId }
+          });
+        }
+      }
+    } catch (notifErr) {
+      console.error('Error sending inventory low notification:', notifErr);
+    }
     return res.status(201).json(newMovement);
   } catch (err) {
     console.error('Error creating stock movement:', err);

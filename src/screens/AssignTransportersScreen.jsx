@@ -1,15 +1,16 @@
 // import withScreenLayout from '../components/withScreenLayout';
 import React, { useEffect, useState, useContext } from 'react';
-import { View, Text, FlatList, ActivityIndicator, StyleSheet, Button, TouchableOpacity } from 'react-native';
+import { View, Text, FlatList, ActivityIndicator, StyleSheet, Button, TouchableOpacity, SafeAreaView } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { AuthContext } from '../context/AuthContext';
 import { Platform } from 'react-native';
+import InternalHeader from '../components/InternalHeader';
 
 const API_URL = Platform.OS === 'android'
   ? 'http://10.0.2.2:3000'
   : 'http://192.168.0.73:3000';
 
-function AssignTransportersScreen() {
+function AssignTransportersScreen({ navigation }) {
   const { userToken } = useContext(AuthContext);
   const [shipments, setShipments] = useState([]);
   const [transporters, setTransporters] = useState([]);
@@ -21,7 +22,7 @@ function AssignTransportersScreen() {
     const fetchData = async () => {
       try {
         const [shipRes, userRes] = await Promise.all([
-          fetch(`${API_URL}/shipments`, { headers: { Authorization: `Bearer ${userToken}` } }),
+          fetch(`${API_URL}/api/shipments`, { headers: { Authorization: `Bearer ${userToken}` } }),
           fetch(`${API_URL}/users`, { headers: { Authorization: `Bearer ${userToken}` } }),
         ]);
         const shipmentsData = await shipRes.json();
@@ -37,12 +38,12 @@ function AssignTransportersScreen() {
     fetchData();
   }, [userToken]);
 
-  const unassignedShipments = shipments.filter(s => !s.transporter);
-  const assignedShipments = shipments.filter(s => s.transporter);
+  const unassignedShipments = Array.isArray(shipments) ? shipments.filter(s => !s.transporterId) : [];
+  const assignedShipments = Array.isArray(shipments) ? shipments.filter(s => s.transporterId) : [];
 
   const assign = async (shipmentId, transporterId) => {
     try {
-      const res = await fetch(`${API_URL}/shipments/${shipmentId}/assign-transporter`, {
+      const res = await fetch(`${API_URL}/api/shipments/${shipmentId}/assign-transporter`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -63,7 +64,8 @@ function AssignTransportersScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <InternalHeader navigation={navigation} title="Assign Transporters" />
       <View style={styles.tabContainer}>
         <TouchableOpacity
           style={[styles.tab, selectedTab === 'unassigned' && styles.activeTab]}
@@ -119,7 +121,7 @@ function AssignTransportersScreen() {
         )}
         ListEmptyComponent={<Text>No shipments to display.</Text>}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

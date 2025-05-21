@@ -38,4 +38,71 @@ export async function fetchReceivingSpeed(token) {
   });
   if (!res.ok) throw new Error(`Error fetching receiving speed: ${res.status}`);
   return res.json();
+}
+
+/**
+ * Fetch inventory aging buckets (0–30, 31–60, 61+ days)
+ */
+export async function fetchInventoryAging(token, warehouseId) {
+  const params = new URLSearchParams();
+  if (warehouseId) params.append('warehouseId', warehouseId);
+  const res = await fetch(`${API_URL}/analytics/warehouse/aging?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Error fetching inventory aging: ${res.status}`);
+  return res.json();
+}
+
+/**
+ * Fetch ABC analysis for SKUs
+ */
+export async function fetchABCAnalysis(token, warehouseId) {
+  const params = new URLSearchParams();
+  if (warehouseId) params.append('warehouseId', warehouseId);
+  const res = await fetch(`${API_URL}/analytics/warehouse/abc?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Error fetching ABC analysis: ${res.status}`);
+  return res.json();
+}
+
+/**
+ * Fetch slow-moving SKUs (low movement count)
+ */
+export async function fetchSlowMovers(token, warehouseId, days = 30, threshold = 1) {
+  const params = new URLSearchParams();
+  if (warehouseId) params.append('warehouseId', warehouseId);
+  params.append('days', days);
+  params.append('threshold', threshold);
+  const res = await fetch(`${API_URL}/analytics/warehouse/slow-movers?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Error fetching slow movers: ${res.status}`);
+  return res.json();
+}
+
+/**
+ * Fetch warehouse daily reports, newest first
+ */
+export async function fetchWarehouseReports(token, warehouseId) {
+  const params = new URLSearchParams();
+  if (warehouseId) params.append('warehouseId', warehouseId);
+  const res = await fetch(`${API_URL}/analytics/warehouse/reports?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Error fetching warehouse reports: ${res.status}`);
+  return res.json();
+}
+
+/**
+ * Fetch rack utilization data for heatmap
+ */
+export async function fetchRackUtilization(token, warehouseId) {
+  const params = new URLSearchParams();
+  if (warehouseId) params.append('warehouseId', warehouseId);
+  const res = await fetch(`${API_URL}/analytics/warehouse/rack-utilization?${params}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Error fetching rack utilization: ${res.status}`);
+  return res.json();
 } 

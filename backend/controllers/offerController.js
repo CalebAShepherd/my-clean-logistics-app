@@ -1,5 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
+const { sendNotification } = require('../services/notificationService');
 
 // POST /offers
 exports.createOffer = async (req, res) => {
@@ -13,6 +14,18 @@ exports.createOffer = async (req, res) => {
     if (!route) return res.status(404).json({ error: 'Route not found' });
     // Create offer
     const offer = await prisma.offer.create({ data: { routeId, transporterId, status: 'pending' } });
+    // Send notification to targeted transporter
+    try {
+      await sendNotification({
+        userId: transporterId,
+        type: 'new_route_offer',
+        title: 'New Route Offer',
+        message: `You have a new route offer for route ${routeId}.`,
+        metadata: { offerId: offer.id, routeId }
+      });
+    } catch (notifErr) {
+      console.error('Error sending route offer notification:', notifErr);
+    }
     return res.status(201).json(offer);
   } catch (err) {
     console.error('Error creating offer:', err);
@@ -29,15 +42,16 @@ exports.listOffers = async (req, res) => {
       where: { transporterId: userId, status: 'pending' },
       orderBy: { createdAt: 'desc' },
       include: {
-        route: {
+        Route: {
           include: {
-            shipments: {
-              include: { shipment: true },
+            RouteShipment: {
+              include: { Shipment: true },
               orderBy: { order: 'asc' }
             },
-            transporter: true
+            User: true
           }
-        }
+        },
+        User: true
       }
     });
     return res.json(offers);

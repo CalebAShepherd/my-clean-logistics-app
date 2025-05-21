@@ -1,8 +1,9 @@
 // import withScreenLayout from '../components/withScreenLayout';
 import React, { useEffect, useState, useContext } from 'react';
-import { View, Text, FlatList, ActivityIndicator, StyleSheet, Button, Alert, TextInput, TouchableOpacity } from 'react-native';
+import { View, Text, FlatList, ActivityIndicator, StyleSheet, Button, Alert, TextInput, TouchableOpacity, SafeAreaView } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import { Platform } from 'react-native';
+import InternalHeader from '../components/InternalHeader';
 
 const API_URL = Platform.OS === 'android'
   ? 'http://10.0.2.2:3000'
@@ -88,9 +89,9 @@ function ManageTransportersScreen({ navigation }) {
   }
 
   return (
-    <View style={styles.container}>
-
-      <Text style={styles.title}>Manage Transporters</Text>
+    <SafeAreaView style={styles.container}>
+      <InternalHeader navigation={navigation} title="Manage Transporters" />
+      
       <TextInput
         style={styles.searchInput}
         placeholder="Search by name, email, or phone"
@@ -166,7 +167,7 @@ function ManageTransportersScreen({ navigation }) {
         )}
         ListEmptyComponent={<Text>No transporters found.</Text>}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

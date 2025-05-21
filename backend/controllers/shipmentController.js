@@ -16,6 +16,9 @@ const rlService = require('../services/rlCarriers');
 const odflService = require('../services/oldDominion');
 const estesService = require('../services/estesExpress');
 const tforceService = require('../services/tForceFreight');
+const cityCentroids = require('../services/cityCentroids');
+const PDFDocument = require('pdfkit');
+const { sendNotification } = require('../services/notificationService');
 
 // Create a new shipment request
 exports.createShipment = async (req, res) => {
@@ -31,16 +34,39 @@ exports.createShipment = async (req, res) => {
       shipmentDate,
       dimensions,
       quantity,
+      palletCount,
       specialInstructions,
       insurance,
-      reference
+      hazmat,
+      reference,
+      pickupStreet,
+      pickupCity,
+      pickupState,
+      pickupZip,
+      deliveryStreet,
+      deliveryCity,
+      deliveryState,
+      deliveryZip
     } = req.body;
+
+    // Build full origin/destination from split fields
+    const originFull = [pickupStreet, pickupCity, pickupState, pickupZip].filter(Boolean).join(', ');
+    const destinationFull = [deliveryStreet, deliveryCity, deliveryState, deliveryZip].filter(Boolean).join(', ');
+
+    // Lookup city centroids
+    function lookupCityLatLng(city, state) {
+      if (!city || !state) return null;
+      const key = `${city.trim().toLowerCase()},${state.trim().toLowerCase()}`;
+      return cityCentroids[key] || null;
+    }
+    const pickupCentroid = lookupCityLatLng(pickupCity, pickupState);
+    const deliveryCentroid = lookupCityLatLng(deliveryCity, deliveryState);
 
     // Create shipment record
     const shipment = await prisma.shipment.create({
       data: {
-        origin,
-        destination,
+        origin: originFull,
+        destination: destinationFull,
         description,
         weight,
         pickupName: pickup.name,
@@ -54,10 +80,24 @@ exports.createShipment = async (req, res) => {
         width: dimensions.width,
         height: dimensions.height,
         quantity,
+        palletCount,
         specialInstructions,
         insurance,
+        hazmat,
         reference,
         status: 'CREATED',
+        pickupStreet,
+        pickupCity,
+        pickupState,
+        pickupZip,
+        deliveryStreet,
+        deliveryCity,
+        deliveryState,
+        deliveryZip,
+        originLat: pickupCentroid?.lat ?? null,
+        originLng: pickupCentroid?.lng ?? null,
+        destinationLat: deliveryCentroid?.lat ?? null,
+        destinationLng: deliveryCentroid?.lng ?? null,
         client: {
           connect: { id: req.user.id }
         }
@@ -75,13 +115,45 @@ exports.createShipment = async (req, res) => {
 // Update shipment status
 exports.updateStatus = async (req, res) => {
   const { id } = req.params;
-  const { status } = req.body;
+  const { status, notes } = req.body;
   try {
-    const updated = await prisma.shipment.update({
+    // Update shipment status
+    const updatedShipment = await prisma.shipment.update({
       where: { id },
       data: { status },
     });
-    return res.json(updated);
+    // Record status change in shipmentUpdates
+    const shipmentUpdate = await prisma.shipmentUpdate.create({
+      data: { shipmentId: id, status, notes },
+    });
+    // Send a notification to the client about status change
+    try {
+      await sendNotification({
+        userId: updatedShipment.clientId,
+        type: 'shipment_status',
+        title: `Shipment status updated to ${status}`,
+        message: notes || null,
+        metadata: { shipmentId: id, status }
+      });
+    } catch (notifErr) {
+      console.error('Error sending notification:', notifErr);
+    }
+    // Notify transporter when shipment is delivered
+    if (status === 'DELIVERED' && updatedShipment.transporterId) {
+      try {
+        await sendNotification({
+          userId: updatedShipment.transporterId,
+          type: 'delivery_confirmed',
+          title: `Shipment ${id} delivered`,
+          message: null,
+          metadata: { shipmentId: id }
+        });
+      } catch (err) {
+        console.error('Error sending delivery confirmation to transporter:', err);
+      }
+    }
+    // Return both updated shipment and the update record
+    return res.json({ shipment: updatedShipment, update: shipmentUpdate });
   } catch (err) {
     console.error('Error updating shipment status:', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -92,7 +164,10 @@ exports.updateStatus = async (req, res) => {
 exports.listShipments = async (req, res) => {
   try {
     const shipments = await prisma.shipment.findMany({
-      include: { serviceCarrier: true },
+      include: {
+        serviceCarrier: true,
+        client: { select: { username: true } }
+      },
       orderBy: { createdAt: 'desc' }
     });
     console.log(`Returning ${shipments.length} shipments`);
@@ -113,7 +188,11 @@ exports.getShipment = async (req, res) => {
   try {
     const shipment = await prisma.shipment.findUnique({
       where: { id },
-      include: { serviceCarrier: true },
+      include: {
+        serviceCarrier: true,
+        documents: true,
+        shipmentUpdates: { orderBy: { createdAt: 'asc' } },
+      },
     });
     if (!shipment) {
       return res.status(404).json({ error: 'Shipment not found' });
@@ -201,7 +280,7 @@ exports.trackShipment = async (req, res) => {
   }
 };
 
-// Book (create) shipment with the assigned carrier’s API
+// Book (create) shipment with the assigned carrier's API
 exports.bookShipment = async (req, res) => {
   const { id } = req.params;
   try {
@@ -300,6 +379,10 @@ exports.validateAddress = async (req, res) => {
  */
 exports.getRates = async (req, res) => {
   const { serviceCarrierCode, ...ratePayload } = req.body;
+  // DEV STUB: return dummy rate quotes for client UI
+  return res.json([
+    { carrier: serviceCarrierCode, rate: 100.00, currency: 'USD', estimatedDelivery: '2 business days' }
+  ]);
   try {
     let result;
     switch (serviceCarrierCode) {
@@ -332,6 +415,26 @@ exports.getRates = async (req, res) => {
         break;
       default:
         return res.status(400).json({ error: 'Unsupported carrier for rates' });
+    }
+    // Send notification about rate quote ready if shipmentId provided
+    try {
+      if (ratePayload.shipmentId) {
+        const shipment = await prisma.shipment.findUnique({ where: { id: ratePayload.shipmentId } });
+        if (shipment) {
+          const notifyUserId = req.user.role === 'dispatcher' ? shipment.clientId : shipment.dispatcherId;
+          if (notifyUserId) {
+            await sendNotification({
+              userId: notifyUserId,
+              type: 'rate_quote_ready',
+              title: 'Rate Quotes Available',
+              message: `Rate quotes are ready for shipment ${shipment.id}.`,
+              metadata: { shipmentId: shipment.id }
+            });
+          }
+        }
+      }
+    } catch (notifErr) {
+      console.error('Error sending rate quote notification:', notifErr);
     }
     return res.json(result);
   } catch (err) {
@@ -399,6 +502,274 @@ exports.genericTrack = async (req, res) => {
     return res.json({ tracking: data });
   } catch (err) {
     console.error('genericTrack error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * Assign a shipment to a warehouse
+ * POST /api/shipments/:id/assign-warehouse
+ * Body: { warehouseId }
+ */
+exports.assignWarehouse = async (req, res) => {
+  const { id } = req.params;
+  const { warehouseId } = req.body;
+  try {
+    // Validate shipment exists
+    const shipment = await prisma.shipment.findUnique({ where: { id } });
+    if (!shipment) {
+      return res.status(404).json({ error: 'Shipment not found' });
+    }
+    // If warehouseId is not null, validate warehouse exists
+    if (warehouseId) {
+      const warehouse = await prisma.warehouse.findUnique({ where: { id: warehouseId } });
+      if (!warehouse) {
+        return res.status(400).json({ error: 'Invalid warehouseId' });
+      }
+    }
+    // Update shipment (allow null)
+    const updated = await prisma.shipment.update({
+      where: { id },
+      data: { warehouseId: warehouseId || null },
+    });
+    return res.json(updated);
+  } catch (err) {
+    console.error('Error assigning warehouse:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * Get inbound shipments for a warehouse, filtered by status
+ * GET /api/warehouses/:id/inbound-shipments?status=IN_TRANSIT
+ */
+exports.getInboundShipmentsForWarehouse = async (req, res) => {
+  const warehouseId = req.params.id;
+  const { status } = req.query;
+  if (!warehouseId) {
+    return res.status(400).json({ error: 'warehouseId is required' });
+  }
+  if (!status) {
+    return res.status(400).json({ error: 'status query param is required' });
+  }
+  try {
+    const shipments = await prisma.shipment.findMany({
+      where: {
+        warehouseId,
+        status,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return res.json(shipments);
+  } catch (err) {
+    console.error('Error fetching inbound shipments:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// GET /shipments/recent - 4 most recent shipments with status, client, and ETA
+exports.getRecentShipments = async (req, res) => {
+  try {
+    // Try to get shipments from the last 30 days
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    let shipments = await prisma.shipment.findMany({
+      where: {
+        OR: [
+          { createdAt: { gte: thirtyDaysAgo } },
+          { updatedAt: { gte: thirtyDaysAgo } },
+        ],
+      },
+      orderBy: [
+        { updatedAt: 'desc' },
+        { createdAt: 'desc' },
+      ],
+      take: 4,
+      include: {
+        client: { select: { username: true, email: true } },
+      },
+    });
+    // If none found, get the 4 most recent regardless of age
+    if (shipments.length === 0) {
+      shipments = await prisma.shipment.findMany({
+        orderBy: [
+          { updatedAt: 'desc' },
+          { createdAt: 'desc' },
+        ],
+        take: 4,
+        include: {
+          client: { select: { username: true, email: true } },
+        },
+      });
+    }
+    // Add ETA placeholder (could be calculated in future)
+    const withEta = shipments.map(s => ({
+      id: s.id,
+      status: s.status,
+      client: s.client?.username || s.client?.email || 'N/A',
+      eta: s.deliveredAt || null, // Placeholder: use deliveredAt or null
+      createdAt: s.createdAt,
+    }));
+    return res.json(withEta);
+  } catch (err) {
+    console.error('Error fetching recent shipments:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// PATCH /api/shipments/:id - Edit shipment (client, admin, dispatcher)
+exports.editShipment = async (req, res) => {
+  const { id } = req.params;
+  const user = req.user;
+  try {
+    // Find shipment
+    const shipment = await prisma.shipment.findUnique({ where: { id } });
+    if (!shipment) return res.status(404).json({ error: 'Shipment not found' });
+    // Only client (owner), admin, or dispatcher can edit
+    if (
+      user.role !== 'admin' &&
+      user.role !== 'dispatcher' &&
+      shipment.clientId !== user.id
+    ) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    // Build update data from allowed fields
+    const allowedFields = [
+      'description','weight','pickupName','pickupPhone','pickupEmail','deliveryName','deliveryPhone','deliveryEmail','shipmentDate','length','width','height','quantity','specialInstructions','insurance','hazmat','reference','pickupStreet','pickupCity','pickupState','pickupZip','deliveryStreet','deliveryCity','deliveryState','deliveryZip','origin','destination'
+    ];
+    const data = {};
+    for (const field of allowedFields) {
+      if (field in req.body) data[field] = req.body[field];
+    }
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+    const updated = await prisma.shipment.update({ where: { id }, data });
+    return res.json(updated);
+  } catch (err) {
+    console.error('Error editing shipment:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// DELETE /api/shipments/:id - Delete shipment (client, admin, dispatcher)
+exports.deleteShipment = async (req, res) => {
+  const { id } = req.params;
+  const user = req.user;
+  try {
+    const shipment = await prisma.shipment.findUnique({ where: { id } });
+    if (!shipment) return res.status(404).json({ error: 'Shipment not found' });
+    if (
+      user.role !== 'admin' &&
+      user.role !== 'dispatcher' &&
+      shipment.clientId !== user.id
+    ) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    await prisma.shipment.delete({ where: { id } });
+    return res.status(204).end();
+  } catch (err) {
+    console.error('Error deleting shipment:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * Export shipments as CSV or PDF
+ */
+exports.exportShipments = async (req, res) => {
+  try {
+    const { status, search, format = 'csv' } = req.query;
+    // Fetch all shipments with client
+    let shipments = await prisma.shipment.findMany({
+      include: { client: { select: { username: true } } },
+      orderBy: { createdAt: 'desc' }
+    });
+    // Filter by status
+    shipments = shipments.filter(s => {
+      const st = s.status.trim().toUpperCase();
+      if (status) {
+        const up = status.toUpperCase();
+        if (up === 'CREATED') return st === 'CREATED' || st === 'ASSIGNED';
+        if (up === 'IN_TRANSIT') return st === 'IN_TRANSIT' || st === 'OUT_FOR_DEL';
+        return st === up;
+      }
+      return true;
+    });
+    // Filter by search
+    if (search) {
+      const q = search.toLowerCase();
+      shipments = shipments.filter(s => (
+        (s.reference || s.id).toLowerCase().includes(q) ||
+        s.client?.username?.toLowerCase().includes(q) ||
+        s.origin.toLowerCase().includes(q) ||
+        s.destination.toLowerCase().includes(q)
+      ));
+    }
+    // CSV export
+    if (format === 'csv') {
+      const header = ['Order ID','Status','Client','Origin','Destination','Weight','Shipment Date','Delivered At'];
+      const rows = shipments.map(s => [
+        s.reference || s.id,
+        s.status,
+        s.client?.username || '',
+        s.origin,
+        s.destination,
+        s.weight,
+        s.shipmentDate.toISOString(),
+        s.deliveredAt ? s.deliveredAt.toISOString() : ''
+      ]);
+      // Helper to escape CSV
+      const escape = v => '"' + String(v).replace(/"/g, '""') + '"';
+      const csv = [header.map(escape).join(','), ...rows.map(r => r.map(escape).join(','))].join('\n');
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="shipments-${Date.now()}.csv"`);
+      return res.send(csv);
+    }
+    // PDF export
+    if (format === 'pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="shipments-${Date.now()}.pdf"`);
+      const doc = new PDFDocument({ margin: 30, size: 'A4' });
+      doc.pipe(res);
+      doc.fontSize(18).text('Shipments Export', { align: 'center' });
+      doc.moveDown();
+      // Table header
+      const headers = ['Order ID','Status','Client','Origin','Destination','Date'];
+      headers.forEach((h, i) => {
+        doc.fontSize(10).text(h, { continued: i < headers.length - 1, width: 90 });
+      });
+      doc.moveDown(0.5);
+      shipments.forEach(s => {
+        const row = [s.reference || s.id, s.status, s.client?.username || '', s.origin, s.destination, new Date(s.shipmentDate).toLocaleString()];
+        row.forEach((v, i) => {
+          doc.fontSize(8).text(String(v), { continued: i < row.length - 1, width: 90 });
+        });
+        doc.moveDown(0.2);
+      });
+      doc.end();
+      return;
+    }
+    // Unsupported format
+    return res.status(400).json({ error: 'Unsupported export format' });
+  } catch (err) {
+    console.error('Error exporting shipments:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * List shipment update history
+ */
+exports.listShipmentUpdates = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const updates = await prisma.shipmentUpdate.findMany({
+      where: { shipmentId: id },
+      orderBy: { createdAt: 'asc' },
+    });
+    return res.json(updates);
+  } catch (err) {
+    console.error('Error listing shipment updates:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }
 };

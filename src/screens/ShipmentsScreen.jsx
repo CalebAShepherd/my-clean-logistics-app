@@ -1,26 +1,48 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, Platform, Button, TouchableOpacity } from 'react-native';
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, Platform, Alert, TouchableOpacity, SafeAreaView, TextInput } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { useNavigation } from '@react-navigation/native';
+import InternalHeader from '../components/InternalHeader';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 
 const API_URL = Platform.OS === 'android'
   ? 'http://10.0.2.2:3000'
   : 'http://192.168.0.73:3000';
 
-function ShipmentList({ status, shipments, onRefresh, userToken, fetching, settings }) {
+function ShipmentList({ status, shipments, onRefresh, userToken, fetching, settings, searchQuery }) {
   const navigation = useNavigation();
-  // Normalize and filter; log each comparison
-  const filtered = shipments.filter(s => {
+  // Map statuses to display labels and colors
+  const statusLabelMap = { CREATED: 'Processing', ASSIGNED: 'Assigned', IN_TRANSIT: 'In Transit', OUT_FOR_DEL: 'Out for Delivery', DELIVERED: 'Completed' };
+  const badgeColors = { CREATED: '#999', ASSIGNED: '#0074D9', IN_TRANSIT: '#FFA500', OUT_FOR_DEL: '#f39c12', DELIVERED: '#4CAF50' };
+  // Normalize and filter by status
+  let filtered = shipments.filter(s => {
     const itemStatus = s.status.trim().toUpperCase();
-    
+    // ASSIGNED shipments in Processing tab (CREATED); OUT_FOR_DEL in In Transit tab
+    if (status === 'CREATED') {
+      return itemStatus === 'CREATED' || itemStatus === 'ASSIGNED';
+    }
+    if (status === 'IN_TRANSIT') {
+      return itemStatus === 'IN_TRANSIT' || itemStatus === 'OUT_FOR_DEL';
+    }
     return itemStatus === status;
   });
+  // Filter by search query
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    filtered = filtered.filter(s => (
+      (s.reference || s.id).toLowerCase().includes(q) ||
+      s.client?.username?.toLowerCase().includes(q) ||
+      s.origin.toLowerCase().includes(q) ||
+      s.destination.toLowerCase().includes(q)
+    ));
+  }
 
   const updateStatus = async (id, newStatus) => {
     try {
-      const res = await fetch(`${API_URL}/shipments/${id}/status`, {
+      const res = await fetch(`${API_URL}/api/shipments/${id}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -54,60 +76,48 @@ function ShipmentList({ status, shipments, onRefresh, userToken, fetching, setti
           </View>
         )}
         renderItem={({ item }) => (
-          <View style={styles.item}>
-            <Text style={styles.title}>Reference No. {item.reference || item.id}</Text>
-            <Text>Status: {item.status}</Text>
-            <Text>Pickup: {item.origin}</Text>
-            <Text>Destination: {item.destination}</Text>
-            <Text>Pickup Contact: {item.pickupName} ({item.pickupPhone}, {item.pickupEmail})</Text>
-            <Text>Delivery Contact: {item.deliveryName} ({item.deliveryPhone}, {item.deliveryEmail})</Text>
-            <Text>Carrier: {item.serviceCarrier?.name || '(unassigned)'}</Text>
-            <Text>Tracking #: {item.trackingNumber || '-'}</Text>
-            <Text>Weight: {item.weight} lbs</Text>
-            <Text>Dimensions: {item.length}×{item.width}×{item.height} ft</Text>
-            <Text>Quantity: {item.quantity}</Text>
-            <Text>Date: {new Date(item.shipmentDate).toLocaleString()}</Text>
-            {item.specialInstructions ? <Text>Notes: {item.specialInstructions}</Text> : null}
-            {item.insurance && <Text>Insurance Requested</Text>}
-            {(settings.ownTransporters || settings.useThirdPartyCarriers) && (
-              <View style={styles.buttonRow}>
-                <Button
-                  title="Processing"
-                  onPress={() => updateStatus(item.id, 'CREATED')}
-                />
-                <Button
-                  title="In Transit"
-                  onPress={() => updateStatus(item.id, 'IN_TRANSIT')}
-                />
-                <Button
-                  title="Delivered"
-                  onPress={() => updateStatus(item.id, 'DELIVERED')}
-                />
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => navigation.navigate('Shipment Details', { id: item.id })}
+          >
+            <View style={styles.cardHeader}>
+              <Text style={styles.orderId}>
+                Order ID {item.reference || item.id.substring(0,8)}
+              </Text>
+              <View style={[styles.badge, { backgroundColor: badgeColors[item.status] || '#999' }]}> 
+                <Text style={styles.badgeText}>
+                  {statusLabelMap[item.status] || item.status}
+                </Text>
               </View>
-            )}
-            <Button
-              title="View Details"
-              onPress={() => navigation.navigate('Shipment Details', { id: item.id })}
-            />
-          </View>
+            </View>
+            {/* Company/client name */}
+            <Text style={styles.companyName}>{item.client?.username}</Text>
+            <View style={styles.addressSection}>
+              <Text style={styles.addressLabel}>Pickup</Text>
+              <Text style={styles.addressText}>{item.origin}</Text>
+              <Text style={styles.addressLabel}>Delivery</Text>
+              <Text style={styles.addressText}>{item.destination}</Text>
+            </View>
+          </TouchableOpacity>
         )}
       />
     </View>
   );
 }
 
-export default function ShipmentsScreen() {
+export default function ShipmentsScreen({ navigation }) {
   const { userToken, user, loading } = useContext(AuthContext);
   const { settings } = useSettings();
   const [index, setIndex] = useState(0);
   const [shipments, setShipments] = useState([]);
   const [fetching, setFetching] = useState(false);
   const [activeTab, setActiveTab] = useState('CREATED');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchAllShipments = () => {
     if (!userToken) return;
     setFetching(true);
-    fetch(`${API_URL}/shipments`, {
+    fetch(`${API_URL}/api/shipments`, {
       headers: { Authorization: `Bearer ${userToken}` },
     })
       .then(res => res.json())
@@ -124,6 +134,27 @@ export default function ShipmentsScreen() {
   React.useEffect(() => {
     fetchAllShipments();
   }, [userToken]);
+
+  // Export shipments as CSV or PDF
+  const handleExport = async (format) => {
+    try {
+      const params = new URLSearchParams();
+      params.append('format', format);
+      params.append('status', activeTab);
+      if (searchQuery) params.append('search', searchQuery);
+      const now = Date.now();
+      const fileExt = format === 'pdf' ? 'pdf' : 'csv';
+      const fileUri = FileSystem.documentDirectory + `shipments-${now}.${fileExt}`;
+      const downloadRes = await FileSystem.downloadAsync(
+        `${API_URL}/api/shipments/export?${params.toString()}`,
+        fileUri,
+        { headers: { Authorization: `Bearer ${userToken}` } }
+      );
+      await Sharing.shareAsync(downloadRes.uri);
+    } catch (e) {
+      Alert.alert('Error', e.message);
+    }
+  };
 
   if (loading || !settings) {
     return <ActivityIndicator style={styles.center} size="large" />;
@@ -145,7 +176,14 @@ export default function ShipmentsScreen() {
   }
 
   return (
-    <>
+    <SafeAreaView style={{ flex: 1 }}>
+      <InternalHeader navigation={navigation} title="Shipments" />
+      <TextInput
+        style={styles.searchInput}
+        placeholder="Search shipments..."
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+      />
       <View style={styles.tabHeader}>
         {[
           ['CREATED', 'Processing'],
@@ -178,12 +216,31 @@ export default function ShipmentsScreen() {
         userToken={userToken}
         fetching={fetching}
         settings={settings}
+        searchQuery={searchQuery}
       />
-    </>
+      {/* Sticky export button above footer navigation */}
+      <TouchableOpacity
+        style={styles.stickyExportButton}
+        onPress={() => Alert.alert(
+          'Export As',
+          null,
+          [
+            { text: 'CSV', onPress: () => handleExport('csv') },
+            { text: 'PDF', onPress: () => handleExport('pdf') },
+            { text: 'Cancel', style: 'cancel' },
+          ]
+        )}
+      >
+        <Text style={styles.stickyExportText}>Export</Text>
+      </TouchableOpacity>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  stickyExportButton: { position: 'absolute', bottom: 16, left: 16, right: 16, backgroundColor: '#007AFF', paddingVertical: 12, borderRadius: 6, alignItems: 'center' },
+  stickyExportText: { color: '#fff', fontWeight: '600', fontSize: 16 },
+  searchInput: { borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 8, marginHorizontal: 16, marginTop: 8, marginBottom: 4 },
   container: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
   text: { fontSize: 18 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -228,5 +285,46 @@ const styles = StyleSheet.create({
     color: '#000',
     fontWeight: '600',
     textTransform: 'uppercase',
+  },
+  card: {
+    padding: 12,
+    // borderBottomWidth: 1,
+    // borderColor: '#ccc',
+    backgroundColor: '#fff',
+    marginVertical: 4,
+    marginHorizontal: 16,
+    borderRadius: 8,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  orderId: {
+    fontWeight: 'bold',
+  },
+  badge: {
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  addressSection: {
+    marginTop: 8,
+  },
+  addressLabel: {
+    fontWeight: 'bold',
+  },
+  addressText: {
+    marginTop: 4,
+  },
+  companyName: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 4,
+    marginBottom: 8,
   },
 });

@@ -7,6 +7,22 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Multi-tenant: Tenant model
+model Tenant {
+  id          String     @id @default(uuid())
+  name        String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Relations to scoped entities
+  users       User[]
+  accounts    Account[]
+  contacts    Contact[]
+  deals       Deal[]
+  invoices    Invoice[]
+  payments    Payment[]
+}
+
 model User {
   id                                    String         @id @default(uuid())
   email                                 String         @unique
@@ -16,6 +32,8 @@ model User {
   updatedAt                             DateTime       @updatedAt
   username                              String         @unique
   phone                                 String?
+  warehouseId                           String?
+  warehouse                             Warehouse?     @relation("WarehouseAdmin", fields: [warehouseId], references: [id])
   DockSchedule                          DockSchedule[]
   Offer                                 Offer[]
   Route                                 Route[]
@@ -23,6 +41,12 @@ model User {
   clientShipments                       Shipment[]     @relation("ClientShipments")
   dispatcherShipments                   Shipment[]     @relation("DispatcherShipments")
   Shipment_Shipment_transporterIdToUser Shipment[]     @relation("Shipment_transporterIdToUser")
+  TransporterLocation                   TransporterLocation?
+  notifications                         Notification[] @relation("UserNotifications")
+  announcements                         Announcement[]  @relation("AnnouncementAuthor")
+  accounts                              Account[]
+  tenantId                              String?
+  tenant                                Tenant?        @relation(fields: [tenantId], references: [id])
 }
 
 model Shipment {
@@ -32,7 +56,7 @@ model Shipment {
   carrierId                         String?
   status                            ShipmentStatus  @default(CREATED)
   createdAt                         DateTime        @default(now())
-  updatedAt                         DateTime        @updatedAt
+  updatedAt                         DateTime        @default(now())
   deliveryEmail                     String
   deliveryName                      String
   deliveryPhone                     String
@@ -59,6 +83,14 @@ model Shipment {
   originLat                         Float?
   originLng                         Float?
   deliveredAt                       DateTime?
+  pickupStreet                      String
+  pickupCity                        String
+  pickupState                       String
+  pickupZip                         String
+  deliveryStreet                    String
+  deliveryCity                      String
+  deliveryState                     String
+  deliveryZip                       String
   DockSchedule                      DockSchedule[]
   RouteShipment                     RouteShipment[]
   carrier                           User?           @relation("CarrierShipments", fields: [carrierId], references: [id])
@@ -66,6 +98,12 @@ model Shipment {
   dispatcher                        User?           @relation("DispatcherShipments", fields: [dispatcherId], references: [id])
   serviceCarrier                    Carrier?        @relation("ServiceCarrierShipments", fields: [serviceCarrierId], references: [id])
   User_Shipment_transporterIdToUser User?           @relation("Shipment_transporterIdToUser", fields: [transporterId], references: [id])
+  warehouseId                       String?
+  warehouse                         Warehouse?      @relation(fields: [warehouseId], references: [id])
+  hazmat                            Boolean         @default(false)
+  documents                         Document[]
+  palletCount                       Int             @default(0)
+  shipmentUpdates                   ShipmentUpdate[]
 }
 
 model Carrier {
@@ -90,6 +128,11 @@ model CompanySettings {
   enablePickups              Boolean  @default(true)
   enableNotifications        Boolean  @default(true)
   enableDevTools             Boolean  @default(false)
+  enableWarehouseHeatmap     Boolean  @default(true)
+  primaryColor               String?   @default("#007AFF")
+  secondaryColor             String?   @default("#FFFFFF")
+  accentColor                String?   @default("#FFAA00")
+  customDomain               String?
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
   googleApiKey               String?
@@ -101,7 +144,7 @@ model Warehouse {
   name                                                   String
   address                                                String
   createdAt                                              DateTime        @default(now())
-  updatedAt                                              DateTime        @updatedAt
+  updatedAt                                              DateTime        @default(now())
   DamageReport                                           DamageReport[]
   DockSchedule                                           DockSchedule[]
   Location                                               Location[]
@@ -109,14 +152,20 @@ model Warehouse {
   TransferOrder_TransferOrder_fromWarehouseIdToWarehouse TransferOrder[] @relation("TransferOrder_fromWarehouseIdToWarehouse")
   TransferOrder_TransferOrder_toWarehouseIdToWarehouse   TransferOrder[] @relation("TransferOrder_toWarehouseIdToWarehouse")
   WarehouseItem                                          WarehouseItem[]
+  shipments                                              Shipment[]
+  administrators                                         User[]          @relation("WarehouseAdmin")
+  warehouseReports                                       WarehouseReport[]
 }
 
 model DamageReport {
-  id            String        @id
+  id            String        @id @default(uuid())
   warehouseId   String
   itemId        String
   quantity      Int
   description   String?
+  type          IncidentType  @default(DAMAGE)
+  reasonCode    String?
+  photoUrls     String[]      @default([])
   reportedAt    DateTime      @default(now())
   InventoryItem InventoryItem @relation(fields: [itemId], references: [id])
   Warehouse     Warehouse     @relation(fields: [warehouseId], references: [id])
@@ -133,7 +182,7 @@ model DockSchedule {
   notes              String?
   createdAt          DateTime   @default(now())
   updatedAt          DateTime
-  Shipment           Shipment?  @relation(fields: [shipmentId], references: [id])
+  Shipment           Shipment?  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
   User               User?      @relation(fields: [transporterId], references: [id])
   Warehouse          Warehouse  @relation(fields: [warehouseId], references: [id])
 }
@@ -144,39 +193,52 @@ model InventoryItem {
   name          String
   description   String?
   unit          String
+  unitCost      Float?          @default(0)
   createdAt     DateTime        @default(now())
   updatedAt     DateTime
   DamageReport  DamageReport[]
   StockMovement StockMovement[]
   TransferOrder TransferOrder[]
   WarehouseItem WarehouseItem[]
+
+  // Custom SKU attribute values
+  attributeValues SkuAttributeValue[]
+
+  // Supplier for the inventory item
+  supplierId    String?
+  supplier      Supplier?      @relation(fields: [supplierId], references: [id])
 }
 
 model Location {
   id            String          @id
   warehouseId   String
-  zone          String
-  shelf         String
-  bin           String
+  zone          String?
+  aisle         String?
+  shelf         String?
+  bin           String?
+  x             Float?
+  y             Float?
   createdAt     DateTime        @default(now())
-  updatedAt     DateTime
+  updatedAt     DateTime        @default(now())
   Warehouse     Warehouse       @relation(fields: [warehouseId], references: [id])
   WarehouseItem WarehouseItem[]
+
+  @@index([warehouseId])
 }
 
 model Offer {
-  id            String      @id
+  id            String      @id @default(uuid())
   routeId       String
   transporterId String
   status        OfferStatus @default(pending)
   createdAt     DateTime    @default(now())
-  updatedAt     DateTime
+  updatedAt     DateTime    @updatedAt
   Route         Route       @relation(fields: [routeId], references: [id])
   User          User        @relation(fields: [transporterId], references: [id])
 }
 
 model Route {
-  id            String          @id
+  id            String          @id @default(uuid())
   transporterId String
   geometry      String
   createdAt     DateTime        @default(now())
@@ -189,8 +251,9 @@ model RouteShipment {
   routeId    String
   shipmentId String
   order      Int
+  status     RouteStopStatus @default(PENDING)
   Route      Route    @relation(fields: [routeId], references: [id])
-  Shipment   Shipment @relation(fields: [shipmentId], references: [id])
+  Shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
 
   @@id([routeId, shipmentId])
 }
@@ -237,6 +300,63 @@ model WarehouseItem {
   @@id([warehouseId, itemId])
 }
 
+model TransporterLocation {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  latitude  Float
+  longitude Float
+  timestamp DateTime @updatedAt
+  User      User     @relation(fields: [userId], references: [id])
+}
+
+model Document {
+  id          String   @id @default(uuid())
+  shipmentId  String
+  type        String
+  url         String
+  createdAt   DateTime @default(now())
+  shipment    Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId])
+}
+
+model ShipmentUpdate {
+  id          String          @id @default(uuid())
+  shipment    Shipment        @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  shipmentId  String
+  status      ShipmentStatus
+  notes       String?
+  createdAt   DateTime        @default(now())
+}
+
+// Notification model for user notifications
+model Notification {
+  id         String   @id @default(uuid())
+  userId     String
+  type       String
+  title      String
+  message    String?
+  metadata   Json?
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  user       User     @relation("UserNotifications", fields: [userId], references: [id])
+}
+
+// Announcement model for admin mass announcements
+model Announcement {
+  id         String    @id @default(uuid())
+  title      String
+  message    String?
+  roles      String[]
+  userId     String?   // for individual announcement
+  metadata   Json?
+  authorId   String
+  createdAt  DateTime  @default(now())
+
+  author     User      @relation("AnnouncementAuthor", fields: [authorId], references: [id])
+}
+
 enum Role {
   admin
   client
@@ -251,6 +371,7 @@ enum ShipmentStatus {
   CREATED
   ASSIGNED
   IN_TRANSIT
+  OUT_FOR_DEL
   DELIVERED
 }
 
@@ -281,4 +402,176 @@ enum TransferStatus {
   PENDING
   COMPLETED
   CANCELLED
+}
+
+enum RouteStopStatus {
+  PENDING
+  COMPLETED
+  SKIPPED
+}
+
+// CRM: Define deals and related models
+enum DealStage {
+  PROSPECTING
+  QUALIFIED
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+  CLOSED_WON
+  CLOSED_LOST
+}
+
+model Account {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  ownerId     String?
+  owner       User?     @relation(fields: [ownerId], references: [id])
+  contacts    Contact[]
+  deals       Deal[]
+  invoices    Invoice[]
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Contact {
+  id        String   @id @default(uuid())
+  firstName String
+  lastName  String
+  email     String   @unique
+  phone     String?
+  accountId String?
+  account   Account? @relation(fields: [accountId], references: [id])
+  deals     Deal[]   @relation("ContactDeals")
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Deal {
+  id        String    @id @default(uuid())
+  title     String
+  amount    Float
+  stage     DealStage @default(PROSPECTING)
+  accountId String?
+  account   Account?  @relation(fields: [accountId], references: [id])
+  contactId String?
+  contact   Contact?  @relation("ContactDeals", fields: [contactId], references: [id])
+  invoices  Invoice[]
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+// Billing: Define invoices and payments
+enum InvoiceStatus {
+  PENDING
+  PAID
+  PARTIAL
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  BANK_TRANSFER
+  CASH
+  CHECK
+  PAYPAL
+  OTHER
+}
+
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique
+  accountId     String
+  account       Account       @relation(fields: [accountId], references: [id])
+  dealId        String?
+  deal          Deal?         @relation(fields: [dealId], references: [id])
+  amount        Float
+  status        InvoiceStatus @default(PENDING)
+  issueDate     DateTime      @default(now())
+  dueDate       DateTime
+  payments      Payment[]
+  tenantId      String        
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  paymentNumber String        @unique
+  invoiceId     String
+  invoice       Invoice       @relation(fields: [invoiceId], references: [id])
+  amount        Float
+  paymentDate   DateTime
+  method        PaymentMethod
+  tenantId      String
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+// SKU Attributes Definition
+enum AttributeType {
+  STRING
+  NUMBER
+}
+
+model SkuAttributeDefinition {
+  id        String       @id @default(uuid())
+  key       String       @unique
+  label     String
+  type      AttributeType
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  values    SkuAttributeValue[]
+}
+
+model SkuAttributeValue {
+  inventoryItemId        String
+  attributeDefinitionId  String
+  valueString            String?
+  valueNumber            Float?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  InventoryItem          InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  attributeDefinition    SkuAttributeDefinition @relation(fields: [attributeDefinitionId], references: [id])
+
+  @@id([inventoryItemId, attributeDefinitionId])
+}
+
+// Incident type for damage or loss
+enum IncidentType {
+  DAMAGE
+  LOSS
+}
+
+// Supplier model
+model Supplier {
+  id          String           @id @default(uuid())
+  name        String
+  contactInfo String?
+
+  InventoryItem InventoryItem[]
+}
+
+/// Warehouse report for scheduled daily summaries
+model WarehouseReport {
+  id            String    @id @default(uuid())
+  warehouseId   String
+  reportDate    DateTime  @default(now())
+  totalSkus     Int
+  totalQuantity Int
+  warehouse     Warehouse @relation(fields: [warehouseId], references: [id])
+
+  @@index([warehouseId])
 }

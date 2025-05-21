@@ -1,7 +1,6 @@
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+const prisma = require('../services/prisma');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret';
 
@@ -20,7 +19,8 @@ module.exports = async (req, res, next) => {
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
-    req.user = { id: user.id, role: user.role };
+    prisma.setTenant(user.tenantId);
+    req.user = { id: user.id, role: user.role, tenantId: user.tenantId };
     next();
   } catch (err) {
     console.error('requireAuth: token verification failed:', err);

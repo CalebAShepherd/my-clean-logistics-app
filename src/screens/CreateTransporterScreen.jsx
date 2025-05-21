@@ -1,8 +1,9 @@
 // import withScreenLayout from '../components/withScreenLayout';
 import React, { useState, useContext } from 'react';
-import { View, TextInput, Button, StyleSheet, Alert, ActivityIndicator, Text } from 'react-native';
+import { View, TextInput, Button, StyleSheet, Alert, ActivityIndicator, Text, SafeAreaView } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import { Platform } from 'react-native';
+import InternalHeader from '../components/InternalHeader';
 
 const API_URL = Platform.OS === 'android'
   ? 'http://10.0.2.2:3000'
@@ -61,7 +62,8 @@ function CreateTransporterScreen({ navigation }) {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <InternalHeader navigation={navigation} title="Create Transporter" />
       <Text style={styles.title}>Create Transporter</Text>
       <TextInput
         style={styles.input}
@@ -85,7 +87,7 @@ function CreateTransporterScreen({ navigation }) {
         onChangeText={setPassword}
       />
       <Button title="Create" onPress={handleCreate} />
-    </View>
+    </SafeAreaView>
   );
 }
 

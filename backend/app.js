@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 let morgan;
 try { morgan = require('morgan'); } catch (e) { morgan = null; }
 
@@ -23,16 +24,27 @@ const transferOrdersRouter = require('./routes/transferOrders');
 const stockMovementsRouter = require('./routes/stockMovements');
 const offersRouter = require('./routes/offers');
 const routesRouter = require('./routes/routes');
+const documentsRouter = require('./routes/documents');
+const notificationsRouter = require('./routes/notifications');
+const announcementsRouter = require('./routes/announcements');
+const skuAttributesRouter = require('./routes/skuAttributes');
+const suppliersRouter = require('./routes/suppliers');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 if (morgan) app.use(morgan('dev'));
+
+// Initialize scheduled notification jobs (late shipment alerts)
+require('./jobs/notificationJobs');
+// Initialize scheduled warehouse report job (daily summaries)
+require('./jobs/warehouseReportJob');
 
 // Mount routes
 app.use('/auth', authRoutes);
 app.use('/users', userRoutes);
-app.use('/shipments', shipmentRoutes);
+app.use('/api/shipments', shipmentRoutes);
 app.use('/carriers', carriersRouter);
 app.use('/company-settings', companySettingsRouter);
 app.use('/warehouses', warehousesRouter);
@@ -48,6 +60,11 @@ app.use('/transfer-orders', transferOrdersRouter);
 app.use('/stock-movements', stockMovementsRouter);
 app.use('/offers', offersRouter);
 app.use('/routes', routesRouter);
+app.use('/api/notifications', notificationsRouter);
+app.use('/api/announcements', announcementsRouter);
+app.use('/api', documentsRouter);
+app.use('/sku-attributes', skuAttributesRouter);
+app.use('/suppliers', suppliersRouter);
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));

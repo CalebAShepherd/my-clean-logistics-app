@@ -1,202 +1,131 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, FlatList, Button, Alert, TouchableOpacity } from 'react-native';
+import { SafeAreaView, View, Text, FlatList, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
+import { useSettings } from '../context/SettingsContext';
+import InternalHeader from '../components/InternalHeader';
 import Constants from 'expo-constants';
+import { useNavigation } from '@react-navigation/native';
 
-const API_URL =
-  Constants.manifest?.extra?.apiUrl ||
-  Constants.expoConfig?.extra?.apiUrl ||
-  'http://192.168.0.73:3000';
+const API_URL = Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.73:3000';
 
-
-// Component to render shipments list filtered by status
-function ShipmentList({ shipments, status, userToken, onRefresh }) {
+function ShipmentList({ status, shipments, onRefresh, userToken, fetching, settings }) {
+  const navigation = useNavigation();
+  // Map statuses to display labels and colors
+  const statusLabelMap = { CREATED: 'Processing', IN_TRANSIT: 'In Transit', DELIVERED: 'Completed' };
+  const badgeColors = { CREATED: '#999', IN_TRANSIT: '#FFA500', DELIVERED: '#4CAF50' };
   const filtered = shipments.filter(s => s.status === status);
+
+  if (fetching) {
+    return <ActivityIndicator style={styles.center} size="large" />;
+  }
   if (!filtered.length) {
     return (
       <View style={styles.center}>
-        <Text style={styles.text}>No shipments</Text>
+        <Text>No shipments</Text>
       </View>
     );
   }
+
   return (
     <FlatList
       data={filtered}
       keyExtractor={item => item.id}
+      contentContainerStyle={{ paddingBottom: 80 }}
       renderItem={({ item }) => (
-        <View style={styles.item}>
-          <Text style={styles.id}>ID: {item.id}</Text>
-          <Text>Status: {item.status}</Text>
-          <Text>Origin: {item.origin}</Text>
-          <Text>Destination: {item.destination}</Text>
-          <Text>Pickup: {item.pickupName} ({item.pickupPhone}, {item.pickupEmail})</Text>
-          <Text>Delivery: {item.deliveryName} ({item.deliveryPhone}, {item.deliveryEmail})</Text>
-          <Text>Shipment Date: {new Date(item.shipmentDate).toLocaleString()}</Text>
-          <Text>Description: {item.description || '-'}</Text>
-          <Text>Weight: {item.weight} lbs</Text>
-          <Text>Dimensions: {item.length}×{item.width}×{item.height} ft</Text>
-          <Text>Quantity: {item.quantity}</Text>
-          <Text>Reference: {item.reference || '-'}</Text>
-          {item.specialInstructions ? <Text>Notes: {item.specialInstructions}</Text> : null}
-          <Text>Insurance: {item.insurance ? 'Yes' : 'No'}</Text>
-          <Text>Carrier: {item.serviceCarrier?.name || '(unassigned)'}</Text>
-          <Text>Tracking #: {item.trackingNumber || '-'}</Text>
-          <Text>Created: {new Date(item.createdAt).toLocaleDateString()}</Text>
-          <Button
-            title="Cancel Shipment"
-            color="red"
-            onPress={() =>
-              Alert.alert(
-                'Confirm Cancel',
-                'Are you sure you want to cancel this shipment?',
-                [
-                  { text: 'No', style: 'cancel' },
-                  {
-                    text: 'Yes',
-                    onPress: async () => {
-                      try {
-                        const res = await fetch(
-                          `${API_URL}/shipments/${item.id}/status`,
-                          {
-                            method: 'PUT',
-                            headers: {
-                              'Content-Type': 'application/json',
-                              Authorization: `Bearer ${userToken}`,
-                            },
-                            body: JSON.stringify({ status: 'CANCELLED' }),
-                          }
-                        );
-                        if (!res.ok) throw new Error('Cancel failed');
-                        onRefresh();
-                      } catch (e) {
-                        Alert.alert('Error', e.message);
-                      }
-                    },
-                  },
-                ]
-              )
-            }
-          />
-        </View>
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => navigation.navigate('Shipment Details', { id: item.id })}
+        >
+          <View style={styles.cardHeader}>
+            <Text style={styles.orderId}>Order ID {item.reference || item.id.substring(0,8)}</Text>
+            <View style={[styles.badge, { backgroundColor: badgeColors[item.status] || '#999' }]}> 
+              <Text style={styles.badgeText}>{statusLabelMap[item.status]}</Text>
+            </View>
+          </View>
+          {/* Company name not needed for client, but keeping layout */}
+          {/* <Text style={styles.companyName}>{item.client?.username}</Text> */}
+          <View style={styles.addressSection}>
+            <Text style={styles.addressLabel}>Pickup</Text>
+            <Text style={styles.addressText}>{item.origin}</Text>
+            <Text style={styles.addressLabel}>Delivery</Text>
+            <Text style={styles.addressText}>{item.destination}</Text>
+          </View>
+        </TouchableOpacity>
       )}
     />
   );
 }
 
-export default function MyShipmentsScreen() {
-  const { userToken, user } = useContext(AuthContext);
+export default function MyShipmentsScreen({ navigation }) {
+  const { user, userToken, navigation: nav } = useContext(AuthContext);
+  const { settings } = useSettings();
   const [shipments, setShipments] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [fetching, setFetching] = useState(false);
   const [activeTab, setActiveTab] = useState('CREATED');
 
-  const fetchMyShipments = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`${API_URL}/shipments`, {
-        headers: { Authorization: `Bearer ${userToken}` },
-      });
-      if (!res.ok) throw new Error('Failed to load shipments');
-      const data = await res.json();
-      const my = data.filter(s => s.clientId === user.id);
-      setShipments(my);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
+  const fetchShipments = () => {
+    if (!userToken) return;
+    setFetching(true);
+    fetch(`${API_URL}/api/shipments`, { headers: { Authorization: `Bearer ${userToken}` } })
+      .then(res => res.json())
+      .then(data => {
+        const my = data.filter(s => s.clientId === user.id);
+        my.sort((a,b) => new Date(a.shipmentDate) - new Date(b.shipmentDate));
+        setShipments(my);
+      })
+      .catch(console.error)
+      .finally(() => setFetching(false));
   };
 
-  useEffect(() => {
-    fetchMyShipments();
-  }, [userToken, user]);
+  useEffect(() => { fetchShipments(); }, [userToken, user.id]);
 
-  if (loading) {
+  if (!settings) {
     return <ActivityIndicator style={styles.center} size="large" />;
-  }
-  if (error) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.error}>Error: {error}</Text>
-      </View>
-    );
   }
 
   return (
-    <>
+    <SafeAreaView style={{ flex: 1 }}>
+      <InternalHeader navigation={navigation} title="My Shipments" />
       <View style={styles.tabHeader}>
         {[
-          ['CREATED', 'Processing'],
-          ['IN_TRANSIT', 'In Transit'],
-          ['DELIVERED', 'Completed']
-        ].map(([status, label]) => (
+          ['CREATED','Processing'],
+          ['IN_TRANSIT','In Transit'],
+          ['DELIVERED','Completed']
+        ].map(([status,label]) => (
           <TouchableOpacity
             key={status}
-            style={[
-              styles.tabButton,
-              activeTab === status && styles.tabButtonActive
-            ]}
+            style={[styles.tabButton, activeTab===status && styles.tabButtonActive]}
             onPress={() => setActiveTab(status)}
           >
-            <Text
-              style={[
-                styles.tabLabel,
-                activeTab === status && styles.tabLabelActive
-              ]}
-            >
-              {label}
-            </Text>
+            <Text style={[styles.tabLabel, activeTab===status && styles.tabLabelActive]}>{label}</Text>
           </TouchableOpacity>
         ))}
       </View>
       <ShipmentList
-        shipments={shipments}
         status={activeTab}
+        shipments={shipments}
+        onRefresh={fetchShipments}
         userToken={userToken}
-        onRefresh={fetchMyShipments}
+        fetching={fetching}
+        settings={settings}
       />
-    </>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  text: { fontSize: 18 },
-  error: { fontSize: 18, color: 'red' },
-  item: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderColor: '#ccc',
-    backgroundColor: '#fff',
-    margin: 8,
-    borderRadius: 6,
-  },
-  id: { fontWeight: 'bold' },
-  tabHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#fff',
-    paddingVertical: 0,
-    borderBottomWidth: 1,
-    borderColor: '#ccc',
-  },
-  tabButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 16,
-  },
-  tabButtonActive: {
-    borderBottomWidth: 2,
-    borderColor: '#000',
-  },
-  tabLabel: {
-    fontSize: 14,
-    color: '#555',
-    textTransform: 'uppercase',
-  },
-  tabLabelActive: {
-    fontWeight: '600',
-    color: '#000',
-    textTransform: 'uppercase',
-  },
+  tabHeader: { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#fff', borderBottomWidth: 1, borderColor: '#ccc' },
+  tabButton: { paddingHorizontal: 12, paddingVertical: 16 },
+  tabButtonActive: { borderBottomWidth: 2, borderColor: '#000' },
+  tabLabel: { fontSize: 14, color: 'gray', textTransform: 'uppercase' },
+  tabLabelActive: { fontSize: 14, color: '#000', fontWeight: '600', textTransform: 'uppercase' },
+  card: { padding: 12, backgroundColor: '#fff', marginVertical: 4, marginHorizontal: 16, borderRadius: 8, borderWidth: 1, borderColor: '#ccc' },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  orderId: { fontWeight: 'bold' },
+  badge: { paddingHorizontal: 6, paddingVertical: 4, borderRadius: 8 },
+  badgeText: { fontSize: 12, fontWeight: 'bold', color: '#fff' },
+  addressSection: { marginTop: 8 },
+  addressLabel: { fontWeight: 'bold' },
+  addressText: { marginTop: 4, flexWrap: 'wrap' },
 });

@@ -1,11 +1,12 @@
 // import withScreenLayout from '../components/withScreenLayout';
 import React, { useEffect, useState, useContext } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, ActivityIndicator, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, Button, StyleSheet, ActivityIndicator, ScrollView, Alert, SafeAreaView } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { AuthContext } from '../context/AuthContext';
 import { fetchWarehouses } from '../api/warehouses';
 import { fetchInventoryItems } from '../api/inventoryItems';
 import { logOutboundShipment } from '../api/outboundShipments';
+import InternalHeader from '../components/InternalHeader';
 
 function OutboundShipmentsScreen({ navigation }) {
   const { userToken } = useContext(AuthContext);
@@ -64,6 +65,8 @@ function OutboundShipmentsScreen({ navigation }) {
   if (loading) return <ActivityIndicator style={styles.center} size="large" />;
 
   return (
+    <SafeAreaView style={{ flex: 1 }}>
+      <InternalHeader navigation={navigation} title="Outbound Shipments" />
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.label}>Warehouse</Text>
       <Picker
@@ -108,6 +111,7 @@ function OutboundShipmentsScreen({ navigation }) {
 
       <Button title="Submit" onPress={onSubmit} disabled={loading} />
     </ScrollView>
+    </SafeAreaView>
   );
 }
 

@@ -1,9 +1,11 @@
 // import withScreenLayout from '../components/withScreenLayout';
 import React, { useState, useContext, useEffect } from 'react';
+import { SafeAreaView } from 'react-native';
 import { View, Text, ActivityIndicator, StyleSheet, Button, ScrollView, Dimensions } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
-import { fetchOnTimeLate, fetchCompletedCount, fetchDeliveryTrends } from '../api/analytics';
+import { fetchOnTimeLate, fetchCompletedCount, fetchDeliveryTrends, fetchForecast, fetchDeliveryAnomalies } from '../api/analytics';
 import { LineChart } from 'react-native-chart-kit';
+import InternalHeader from '../components/InternalHeader';
 
 const screenWidth = Dimensions.get('window').width - 32;
 const chartConfig = {
@@ -14,7 +16,7 @@ const chartConfig = {
   decimalPlaces: 0,
 };
 
-function AnalyticsScreen() {
+function AnalyticsScreen({ navigation }) {
   const { userToken } = useContext(AuthContext);
   const [range, setRange] = useState('week'); // 'week'|'month'|'year'|'all'
   const [startDate, setStartDate] = useState(new Date(Date.now() - 7*24*60*60*1000));
@@ -22,6 +24,8 @@ function AnalyticsScreen() {
   const [stats, setStats] = useState(null);
   const [completed, setCompleted] = useState(null);
   const [trends, setTrends] = useState([]);
+  const [forecastData, setForecastData] = useState(null);
+  const [anomalies, setAnomalies] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const updateDates = (r) => {
@@ -41,14 +45,18 @@ function AnalyticsScreen() {
     const load = async () => {
       setLoading(true);
       try {
-        const [s, c, t] = await Promise.all([
+        const [s, c, t, f, a] = await Promise.all([
           fetchOnTimeLate(userToken, startDate, endDate),
           fetchCompletedCount(userToken, startDate, endDate),
-          fetchDeliveryTrends(userToken, startDate, endDate, range)
+          fetchDeliveryTrends(userToken, startDate, endDate, range),
+          fetchForecast(userToken, startDate, endDate, range),
+          fetchDeliveryAnomalies(userToken, startDate, endDate)
         ]);
         setStats(s);
         setCompleted(c);
         setTrends(t);
+        setForecastData(f);
+        setAnomalies(a);
       } catch (e) {
         console.error('Analytics load error:', e);
       } finally {
@@ -66,6 +74,8 @@ function AnalyticsScreen() {
   const dataPoints = trends.map(item => item.count);
 
   return (
+    <SafeAreaView style={styles.container}>
+      <InternalHeader navigation={navigation} title="Analytics" />
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.buttonRow}>
         {['week','month','year','all'].map(r => (
@@ -94,7 +104,26 @@ function AnalyticsScreen() {
           />
         ) : <Text>No data</Text>}
       </View>
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Forecast Next {forecastData?.forecast?.period}</Text>
+        {forecastData?.forecast ? (
+          <Text style={styles.cardTitle}>{forecastData.forecast.count}</Text>
+        ) : (
+          <Text>No forecast available</Text>
+        )}
+      </View>
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Delivery Anomalies (transit {'>'} mean+2σ)</Text>
+        {anomalies.length > 0 ? (
+          anomalies.map(item => (
+            <Text key={item.id}>{item.id}: {(+item.transitsecs/3600).toFixed(2)}h</Text>
+          ))
+        ) : (
+          <Text>No anomalies detected</Text>
+        )}
+      </View>
     </ScrollView>
+    </SafeAreaView>
   );
 }
 

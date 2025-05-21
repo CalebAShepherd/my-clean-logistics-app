@@ -10,6 +10,14 @@ router.post('/', requireAuth, shipmentController.createShipment);
 // List shipments by status (admin/dispatcher)
 router.get('/', requireAuth, shipmentController.listShipments);
 
+// Export shipments as CSV or PDF (admin/dispatcher)
+router.get(
+  '/export',
+  requireAuth,
+  requireRole(['admin','dispatcher']),
+  shipmentController.exportShipments
+);
+
 // Generic tracking by number (FedEx sandbox)
 router.get(
   '/track',
@@ -23,7 +31,13 @@ router.get(
   shipmentController.genericTrack
 );
 
+// GET /recent - 4 most recent shipments (admin, dispatcher, warehouse_admin)
+router.get('/recent', requireAuth, requireRole(['admin','dispatcher','warehouse_admin']), shipmentController.getRecentShipments);
+
 router.get('/:id', requireAuth, shipmentController.getShipment);
+
+// Get shipment status update history
+router.get('/:id/updates', requireAuth, shipmentController.listShipmentUpdates);
 
 // Get a single shipment by ID
 router.get(
@@ -32,17 +46,11 @@ router.get(
   shipmentController.getShipment
 );
 
-// Update shipment status (dispatcher or admin)
+// Update shipment status (admin, dispatcher, or transporter)
 router.put(
   '/:id/status',
   requireAuth,
-  (req, res, next) => {
-    const role = req.user.role;
-    if (role !== 'dispatcher' && role !== 'admin') {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
-    next();
-  },
+  requireRole(['admin', 'dispatcher', 'transporter']),
   shipmentController.updateStatus
 );
 
@@ -87,7 +95,7 @@ router.post(
 router.post(
   '/rates',
   requireAuth,
-  requireRole('dispatcher'),
+  requireRole(['dispatcher','client']),
   shipmentController.getRates
 );
 
@@ -98,5 +106,25 @@ router.post(
   requireRole('dispatcher'),
   shipmentController.requestPickup
 );
+
+// Assign a shipment to a warehouse (admin, dispatcher, warehouse_admin)
+router.post(
+  '/:id/assign-warehouse',
+  requireAuth,
+  (req, res, next) => {
+    const role = req.user.role;
+    if (!['admin', 'dispatcher', 'warehouse_admin'].includes(role)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    next();
+  },
+  shipmentController.assignWarehouse
+);
+
+// Edit a shipment (client, admin, dispatcher)
+router.patch('/:id', requireAuth, shipmentController.editShipment);
+
+// Delete a shipment (client, admin, dispatcher)
+router.delete('/:id', requireAuth, shipmentController.deleteShipment);
 
 module.exports = router;

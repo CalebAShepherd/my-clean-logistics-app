@@ -1,4 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
+const { randomUUID } = require('crypto');
 const prisma = new PrismaClient();
 
 /**
@@ -39,13 +40,19 @@ exports.getLocation = async (req, res) => {
  */
 exports.createLocation = async (req, res) => {
   try {
-    const { warehouseId, zone, shelf, bin } = req.body;
-    if (!warehouseId || !zone || !shelf || !bin) {
-      return res.status(400).json({ error: 'warehouseId, zone, shelf, and bin are required' });
+    const { warehouseId, zone, aisle, shelf, bin, x, y } = req.body;
+    if (!warehouseId || x === undefined || y === undefined) {
+      return res.status(400).json({ error: 'warehouseId, x, and y are required' });
     }
-    const newLocation = await prisma.location.create({
-      data: { warehouseId, zone, shelf, bin }
-    });
+    // Generate a unique ID for the new location
+    const id = randomUUID();
+    // Build data object for optional fields
+    const data = { id, warehouseId, x: Number(x), y: Number(y) };
+    if (zone !== undefined) data.zone = zone;
+    if (aisle !== undefined) data.aisle = aisle;
+    if (shelf !== undefined) data.shelf = shelf;
+    if (bin !== undefined) data.bin = bin;
+    const newLocation = await prisma.location.create({ data });
     return res.status(201).json(newLocation);
   } catch (err) {
     console.error('Error creating location:', err);

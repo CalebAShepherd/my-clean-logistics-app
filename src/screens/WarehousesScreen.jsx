@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
+import { SafeAreaView } from 'react-native';
 import {
   View,
   Text,
@@ -13,13 +14,14 @@ import {
 import Constants from 'expo-constants';
 import { AuthContext } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
+import InternalHeader from '../components/InternalHeader';
 
 const API_URL =
   Constants.manifest?.extra?.apiUrl ||
   Constants.expoConfig?.extra?.apiUrl ||
   'http://192.168.0.73:3000';
 
-export default function WarehousesScreen() {
+export default function WarehousesScreen({ navigation }) {
   const { userToken, user } = useContext(AuthContext);
   const { settings } = useSettings();
   const [warehouses, setWarehouses] = useState([]);
@@ -101,9 +103,9 @@ export default function WarehousesScreen() {
 
   if (!settings?.hasWarehouses) {
     return (
-      <View style={styles.center}>
+      <SafeAreaView style={styles.center}>
         <Text>Warehouses feature is disabled.</Text>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -112,7 +114,8 @@ export default function WarehousesScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <InternalHeader navigation={navigation} title="Warehouses" />
       {user.role === 'dev' && (
         <View style={styles.form}>
           <TextInput
@@ -150,7 +153,7 @@ export default function WarehousesScreen() {
         )}
         ItemSeparatorComponent={() => <View style={styles.sep} />}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

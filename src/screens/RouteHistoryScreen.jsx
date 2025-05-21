@@ -1,8 +1,9 @@
 //import withScreenLayout from '../components/withScreenLayout';
 import React, { useEffect, useState, useContext } from 'react';
-import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, FlatList, ActivityIndicator, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
 import Constants from 'expo-constants';
 import { AuthContext } from '../context/AuthContext';
+import InternalHeader from '../components/InternalHeader';
 
 const API_URL = Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.73:3000';
 
@@ -32,7 +33,8 @@ function RouteHistoryScreen({ navigation }) {
   if (loading) return <ActivityIndicator style={styles.center} size="large" />;
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <InternalHeader navigation={navigation} title="Route History" />
       <FlatList
         data={routes}
         keyExtractor={item => item.id}
@@ -47,7 +49,7 @@ function RouteHistoryScreen({ navigation }) {
         )}
         ListEmptyComponent={<Text>No routes found.</Text>}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

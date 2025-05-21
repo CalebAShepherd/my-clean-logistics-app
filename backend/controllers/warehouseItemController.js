@@ -1,16 +1,21 @@
 const { PrismaClient } = require('@prisma/client');
+const { randomUUID } = require('crypto');
 const prisma = new PrismaClient();
 
 /**
- * List warehouse items, optionally filtered by warehouseId or itemId
+ * List warehouse items, optionally filtered by warehouseId, itemId, or locationId
  */
 exports.getWarehouseItems = async (req, res) => {
   try {
-    const { warehouseId, itemId } = req.query;
+    const { warehouseId, itemId, locationId } = req.query;
     const where = {};
     if (warehouseId) where.warehouseId = warehouseId;
     if (itemId) where.itemId = itemId;
-    const items = await prisma.warehouseItem.findMany({ where, include: { item: true } });
+    if (locationId) where.locationId = locationId;
+    const items = await prisma.warehouseItem.findMany({
+      where,
+      include: { InventoryItem: { include: { supplier: true } }, Location: true, Warehouse: true },
+    });
     return res.json(items);
   } catch (err) {
     console.error('Error fetching warehouse items:', err);
@@ -26,7 +31,7 @@ exports.getWarehouseItem = async (req, res) => {
     const { warehouseId, itemId } = req.params;
     const item = await prisma.warehouseItem.findUnique({
       where: { warehouseId_itemId: { warehouseId, itemId } },
-      include: { item: true }
+      include: { InventoryItem: { include: { supplier: true } }, Location: true, Warehouse: true },
     });
     if (!item) {
       return res.status(404).json({ error: 'Not found' });
@@ -47,13 +52,32 @@ exports.createWarehouseItem = async (req, res) => {
     if (!warehouseId || !itemId) {
       return res.status(400).json({ error: 'warehouseId and itemId are required' });
     }
-    const newEntry = await prisma.warehouseItem.create({
-      data: { warehouseId, itemId, locationId, quantity, minThreshold, maxThreshold, expiresAt }
-    });
+    // Build data object for creation
+    const data = { warehouseId, itemId };
+    if (locationId !== undefined) data.locationId = locationId;
+    if (quantity !== undefined) data.quantity = Number(quantity);
+    if (minThreshold !== undefined) data.minThreshold = Number(minThreshold);
+    if (maxThreshold !== undefined) data.maxThreshold = Number(maxThreshold);
+    if (expiresAt !== undefined) data.expiresAt = new Date(expiresAt);
+    let newEntry;
+    try {
+      newEntry = await prisma.warehouseItem.create({ data });
+    } catch (err) {
+      // On unique constraint violation, update existing
+      if (err.code === 'P2002') {
+        newEntry = await prisma.warehouseItem.update({
+          where: { warehouseId_itemId: { warehouseId, itemId } },
+          data,
+        });
+      } else {
+        throw err;
+      }
+    }
     // Record initial stock movement if quantity > 0
     if (newEntry.quantity > 0) {
       await prisma.stockMovement.create({
         data: {
+          id: randomUUID(),
           warehouseId: newEntry.warehouseId,
           itemId: newEntry.itemId,
           type: 'INBOUND',
@@ -88,6 +112,7 @@ exports.updateWarehouseItem = async (req, res) => {
     if (delta !== 0) {
       await prisma.stockMovement.create({
         data: {
+          id: randomUUID(),
           warehouseId,
           itemId,
           type: delta > 0 ? 'INBOUND' : 'OUTBOUND',

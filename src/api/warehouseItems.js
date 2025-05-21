@@ -14,6 +14,7 @@ export async function fetchWarehouseItems(token, filters = {}) {
   const params = new URLSearchParams();
   if (filters.warehouseId) params.append('warehouseId', filters.warehouseId);
   if (filters.itemId) params.append('itemId', filters.itemId);
+  if (filters.locationId) params.append('locationId', filters.locationId);
   const res = await fetch(`${API_URL}/warehouse-items?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -44,8 +45,17 @@ export async function createWarehouseItem(token, data) {
     },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error(`Error creating warehouse item: ${res.status}`);
-  return res.json();
+  let body;
+  try {
+    body = await res.json();
+  } catch (e) {
+    throw new Error(`Error creating warehouse item: ${res.status}`);
+  }
+  if (!res.ok) {
+    const msg = body.error || body.message || `Error creating warehouse item: ${res.status}`;
+    throw new Error(msg);
+  }
+  return body;
 }
 
 /**
@@ -60,8 +70,17 @@ export async function updateWarehouseItem(token, warehouseId, itemId, data) {
     },
     body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error(`Error updating warehouse item: ${res.status}`);
-  return res.json();
+  let body;
+  try {
+    body = await res.json();
+  } catch (e) {
+    throw new Error(`Error updating warehouse item: ${res.status}`);
+  }
+  if (!res.ok) {
+    const msg = body.error || body.message || `Error updating warehouse item: ${res.status}`;
+    throw new Error(msg);
+  }
+  return body;
 }
 
 /**

@@ -1,83 +1,91 @@
-import React, { useContext, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, ScrollView, TextInput, Button } from 'react-native';
+import React, { useContext, useEffect, useState } from 'react';
+import { SafeAreaView, FlatList, View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
+import { useSettings } from '../context/SettingsContext';
+import InternalHeader from '../components/InternalHeader';
 import Constants from 'expo-constants';
 
 const API_URL =
   Constants.manifest?.extra?.apiUrl ||
   Constants.expoConfig?.extra?.apiUrl ||
   'http://192.168.0.73:3000';
-  
 
-export default function ShipmentTrackingScreen() {
-  const { userToken } = useContext(AuthContext);
-  const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [trackingInput, setTrackingInput] = useState('');
+const statusLabelMap = { CREATED: 'Processing', IN_TRANSIT: 'In Transit', DELIVERED: 'Completed' };
+const badgeColors = { CREATED: '#999', IN_TRANSIT: '#FFA500', DELIVERED: '#4CAF50' };
 
-  console.log(userToken)
+export default function ShipmentTrackingScreen({ navigation }) {
+  const { user, userToken } = useContext(AuthContext);
+  const { settings } = useSettings();
+  const [shipments, setShipments] = useState([]);
+  const [fetching, setFetching] = useState(false);
 
-  const fetchTracking = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      // Call generic tracking endpoint by tracking number
-      const res = await fetch(`${API_URL}/track?trackingNumber=${encodeURIComponent(trackingInput)}`, {
-        headers: { Authorization: `Bearer ${userToken}` },
-      });
-      if (!res.ok) throw new Error('Failed to fetch tracking');
-      const data = await res.json();
-      setEvents(data.tracking || data.events || []);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
+  const fetchShipments = () => {
+    if (!userToken) return;
+    setFetching(true);
+    fetch(`${API_URL}/api/shipments`, {
+      headers: { Authorization: `Bearer ${userToken}` },
+    })
+      .then(res => res.json())
+      .then(data => {
+        const my = data.filter(s => s.clientId === user.id);
+        my.sort((a, b) => new Date(a.shipmentDate) - new Date(b.shipmentDate));
+        setShipments(my);
+      })
+      .catch(console.error)
+      .finally(() => setFetching(false));
   };
 
+  useEffect(fetchShipments, [userToken, user.id]);
+
+  if (!settings) {
+    return <ActivityIndicator style={styles.center} size="large" />;
+  }
+
   return (
-    <View style={styles.container}>
-      <TextInput
-        style={styles.input}
-        placeholder="Enter tracking number"
-        value={trackingInput}
-        onChangeText={setTrackingInput}
-      />
-      <Button title="Track" onPress={fetchTracking} />
-      {loading ? (
+    <SafeAreaView style={{ flex: 1 }}>
+      <InternalHeader navigation={navigation} title="Choose a Shipment to Track" />
+      {fetching ? (
         <ActivityIndicator style={styles.center} size="large" />
-      ) : error ? (
-        <View style={styles.container}>
-          <Text style={styles.error}>Error: {error}</Text>
-        </View>
-      ) : !events.length ? (
-        <View style={styles.container}>
-          <Text style={styles.text}>No tracking events available.</Text>
-        </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.container}>
-          <Text style={styles.title}>Tracking Events</Text>
-          {events.map((evt, idx) => (
-            <View key={idx} style={styles.event}>
-              <Text style={styles.eventTime}>{new Date(evt.timestamp).toLocaleString()}</Text>
-              <Text style={styles.eventDesc}>{evt.status || evt.description || JSON.stringify(evt)}</Text>
-            </View>
-          ))}
-        </ScrollView>
+        <FlatList
+          data={shipments}
+          keyExtractor={item => item.id}
+          contentContainerStyle={{ paddingBottom: 80 }}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.card}
+              onPress={() => navigation.navigate('Tracking Details', { id: item.id })}
+            >
+              <View style={styles.cardHeader}>
+                <Text style={styles.orderId}>
+                  Order ID {item.reference || item.id.substring(0, 8)}
+                </Text>
+                <View style={[styles.badge, { backgroundColor: badgeColors[item.status] || '#999' }]}>  
+                  <Text style={styles.badgeText}>{statusLabelMap[item.status]}</Text>
+                </View>
+              </View>
+              <View style={styles.addressSection}>
+                <Text style={styles.addressLabel}>Pickup</Text>
+                <Text style={styles.addressText}>{item.origin}</Text>
+                <Text style={styles.addressLabel}>Delivery</Text>
+                <Text style={styles.addressText}>{item.destination}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+        />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  title: { fontSize: 20, fontWeight: 'bold', marginBottom: 12 },
-  event: { marginBottom: 12, borderBottomWidth: 1, borderColor: '#ccc', paddingBottom: 8 },
-  eventTime: { fontSize: 14, color: '#555' },
-  eventDesc: { fontSize: 16 },
-  text: { fontSize: 18 },
-  error: { fontSize: 18, color: 'red' },
-  input: { borderWidth: 1, borderColor: '#ccc', padding: 8, marginVertical: 8, borderRadius: 4 },
+  card: { padding: 12, backgroundColor: '#fff', marginVertical: 4, marginHorizontal: 16, borderRadius: 8, borderWidth: 1, borderColor: '#ccc' },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  orderId: { fontWeight: 'bold' },
+  badge: { paddingHorizontal: 6, paddingVertical: 4, borderRadius: 8 },
+  badgeText: { fontSize: 12, fontWeight: 'bold', color: '#fff' },
+  addressSection: { marginTop: 8 },
+  addressLabel: { fontWeight: 'bold' },
+  addressText: { marginTop: 4, flexWrap: 'wrap' },
 });

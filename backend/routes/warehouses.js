@@ -1,5 +1,3 @@
-
-
 const express = require('express');
 const router = express.Router();
 const requireAuth = require('../middleware/requireAuth');
@@ -9,6 +7,7 @@ const {
   createWarehouse,
   deleteWarehouse
 } = require('../controllers/warehouseController');
+const shipmentController = require('../controllers/shipmentController');
 
 // List warehouses (admin and dispatcher)
 router.get(
@@ -32,6 +31,14 @@ router.delete(
   requireAuth,
   requireRole('dev', 'admin', 'warehouse_admin'),
   deleteWarehouse
+);
+
+// Get inbound shipments for a warehouse, filtered by status (admin, dispatcher, warehouse_admin)
+router.get(
+  '/:id/inbound-shipments',
+  requireAuth,
+  requireRole(['admin','dispatcher','warehouse_admin']),
+  shipmentController.getInboundShipmentsForWarehouse
 );
 
 module.exports = router;
