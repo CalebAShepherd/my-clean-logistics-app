@@ -1,6 +1,8 @@
 // import withScreenLayout from '../components/withScreenLayout';
 import React, { useEffect, useState, useContext } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { View, Text, TextInput, StyleSheet, ActivityIndicator, Alert, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Picker } from '@react-native-picker/picker';
 import { AuthContext } from '../context/AuthContext';
 import { fetchWarehouses } from '../api/warehouses';
@@ -24,40 +26,96 @@ function CreateLocationScreen({ navigation }) {
   const [quantity, setQuantity] = useState('');
   const [maxThreshold, setMaxThreshold] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadingItems, setLoadingItems] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    const loadWarehouses = async () => {
+    const loadData = async () => {
       try {
-        const wh = await fetchWarehouses(userToken);
+        const [wh, items] = await Promise.all([
+          fetchWarehouses(userToken),
+          fetchInventoryItems(userToken)
+        ]);
+        
         setWarehouses(wh);
         if (wh.length) setWarehouseId(wh[0].id);
-      } catch (err) {
-        console.error('Error loading warehouses:', err);
-        Alert.alert('Error', 'Failed to load warehouses');
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadWarehouses();
-    const loadItems = async () => {
-      try {
-        const items = await fetchInventoryItems(userToken);
+        
         setInventoryItems(items);
         if (items.length) setItemId(items[0].id);
       } catch (err) {
-        console.error('Error loading inventory items:', err);
+        console.error('Error loading data:', err);
+        Alert.alert('Error', 'Failed to load required data. Please try again.');
+      } finally {
+        setLoading(false);
+        setLoadingItems(false);
       }
     };
-    loadItems();
+    loadData();
   }, [userToken]);
 
+  const validateForm = () => {
+    const newErrors = {};
+    
+    if (!warehouseId) {
+      newErrors.warehouse = 'Warehouse selection is required';
+    }
+    if (!zone.trim()) {
+      newErrors.zone = 'Zone is required';
+    }
+    if (!shelf.trim()) {
+      newErrors.shelf = 'Shelf is required';
+    }
+    if (!bin.trim()) {
+      newErrors.bin = 'Bin is required';
+    }
+    if (!x.trim()) {
+      newErrors.x = 'X coordinate is required';
+    } else if (isNaN(parseFloat(x))) {
+      newErrors.x = 'X coordinate must be a valid number';
+    }
+    if (!y.trim()) {
+      newErrors.y = 'Y coordinate is required';
+    } else if (isNaN(parseFloat(y))) {
+      newErrors.y = 'Y coordinate must be a valid number';
+    }
+    if (!itemId) {
+      newErrors.item = 'Item selection is required';
+    }
+    if (!quantity.trim()) {
+      newErrors.quantity = 'Quantity is required';
+    } else if (isNaN(parseInt(quantity, 10)) || parseInt(quantity, 10) < 0) {
+      newErrors.quantity = 'Quantity must be a valid positive number';
+    }
+    if (!maxThreshold.trim()) {
+      newErrors.maxThreshold = 'Capacity is required';
+    } else if (isNaN(parseInt(maxThreshold, 10)) || parseInt(maxThreshold, 10) <= 0) {
+      newErrors.maxThreshold = 'Capacity must be a valid positive number';
+    } else if (parseInt(quantity, 10) > parseInt(maxThreshold, 10)) {
+      newErrors.quantity = 'Quantity cannot exceed capacity';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const onSave = async () => {
-    if (!warehouseId || !zone.trim() || !shelf.trim() || !bin.trim() || !x.trim() || !y.trim() || !itemId || !quantity.trim() || !maxThreshold.trim()) {
-      Alert.alert('Validation', 'All fields (including item, quantity, capacity, X and Y) are required');
+    if (!validateForm()) {
+      Alert.alert('Validation Error', 'Please fix the errors below and try again.');
       return;
     }
+    
+    setSaving(true);
     try {
-      const newLoc = await createLocation(userToken, { warehouseId, zone, shelf, bin, x: parseFloat(x), y: parseFloat(y) });
+      const newLoc = await createLocation(userToken, { 
+        warehouseId, 
+        zone: zone.trim(), 
+        shelf: shelf.trim(), 
+        bin: bin.trim(), 
+        x: parseFloat(x), 
+        y: parseFloat(y) 
+      });
+      
       await createWarehouseItem(userToken, {
         warehouseId,
         itemId,
@@ -65,89 +123,626 @@ function CreateLocationScreen({ navigation }) {
         quantity: parseInt(quantity, 10),
         maxThreshold: parseInt(maxThreshold, 10)
       });
-      Alert.alert('Success', 'Location and rack item created');
-      navigation.goBack();
+      
+      Alert.alert(
+        'Success',
+        'Location and inventory item created successfully!',
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack()
+          }
+        ]
+      );
     } catch (err) {
       console.error('Create location error:', err);
-      Alert.alert('Error', err.message);
+      Alert.alert('Error', err.message || 'Failed to create location. Please try again.');
+    } finally {
+      setSaving(false);
     }
   };
 
   if (loading) {
-    return <ActivityIndicator style={styles.center} size="large" />;
+    return (
+      <SafeAreaView style={styles.container}>
+        <InternalHeader navigation={navigation} title="Create Location" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={styles.loadingText}>Loading warehouses and items...</Text>
+        </View>
+      </SafeAreaView>
+    );
   }
+
+  const selectedWarehouse = warehouses.find(w => w.id === warehouseId);
+  const selectedItem = inventoryItems.find(item => item.id === itemId);
 
   return (
     <SafeAreaView style={styles.container}>
       <InternalHeader navigation={navigation} title="Create Location" />
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <Text style={styles.label}>Warehouse</Text>
-        <Picker
-          selectedValue={warehouseId}
-          onValueChange={setWarehouseId}
-          style={styles.picker}
+      
+      <KeyboardAvoidingView 
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          {warehouses.map((w) => (
-            <Picker.Item key={w.id} label={w.name} value={w.id} />
-          ))}
-        </Picker>
-        <Text style={styles.label}>Zone</Text>
-        <TextInput style={styles.input} value={zone} onChangeText={setZone} />
-        <Text style={styles.label}>Shelf</Text>
-        <TextInput style={styles.input} value={shelf} onChangeText={setShelf} />
-        <Text style={styles.label}>Bin</Text>
-        <TextInput style={styles.input} value={bin} onChangeText={setBin} />
-        <Text style={styles.label}>X Coordinate</Text>
-        <TextInput
-          style={styles.input}
-          value={x}
-          onChangeText={setX}
-          keyboardType='numeric'
-        />
-        <Text style={styles.label}>Y Coordinate</Text>
-        <TextInput
-          style={styles.input}
-          value={y}
-          onChangeText={setY}
-          keyboardType='numeric'
-        />
-        <Text style={styles.label}>Item</Text>
-        <Picker
-          selectedValue={itemId}
-          onValueChange={setItemId}
-          style={styles.picker}
-        >
-          {inventoryItems.map((it) => (
-            <Picker.Item key={it.id} label={it.name || it.sku} value={it.id} />
-          ))}
-        </Picker>
-        <Text style={styles.label}>Quantity</Text>
-        <TextInput
-          style={styles.input}
-          value={quantity}
-          onChangeText={setQuantity}
-          keyboardType='numeric'
-        />
-        <Text style={styles.label}>Capacity (Max Threshold)</Text>
-        <TextInput
-          style={styles.input}
-          value={maxThreshold}
-          onChangeText={setMaxThreshold}
-          keyboardType='numeric'
-        />
-        <Button title="Save" onPress={onSave} />
-      </ScrollView>
+          {/* Header Section */}
+          <View style={styles.headerSection}>
+            <View style={styles.headerIcon}>
+              <MaterialCommunityIcons name="map-marker-plus" size={32} color="#007AFF" />
+            </View>
+            <Text style={styles.headerTitle}>New Storage Location</Text>
+            <Text style={styles.headerSubtitle}>Create a new location and add initial inventory</Text>
+          </View>
+
+          {/* Warehouse Selection */}
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <MaterialCommunityIcons name="warehouse" size={20} color="#007AFF" />
+              <Text style={styles.cardTitle}>Warehouse Selection</Text>
+            </View>
+            
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>
+                Warehouse <Text style={styles.required}>*</Text>
+              </Text>
+              <View style={[styles.pickerContainer, errors.warehouse && styles.inputError]}>
+                <Picker
+                  selectedValue={warehouseId}
+                  onValueChange={(value) => {
+                    setWarehouseId(value);
+                    if (errors.warehouse) setErrors(prev => ({ ...prev, warehouse: null }));
+                  }}
+                  style={styles.picker}
+                >
+                  {warehouses.map((w) => (
+                    <Picker.Item key={w.id} label={w.name} value={w.id} />
+                  ))}
+                </Picker>
+              </View>
+              {errors.warehouse && <Text style={styles.errorText}>{errors.warehouse}</Text>}
+              
+              {selectedWarehouse && (
+                <View style={styles.selectionInfo}>
+                  <MaterialCommunityIcons name="check-circle" size={16} color="#34C759" />
+                  <Text style={styles.selectionText}>
+                    Selected: {selectedWarehouse.name}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* Location Details */}
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <MaterialCommunityIcons name="map-marker" size={20} color="#007AFF" />
+              <Text style={styles.cardTitle}>Location Details</Text>
+            </View>
+            
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>
+                Zone <Text style={styles.required}>*</Text>
+              </Text>
+              <TextInput 
+                style={[styles.input, errors.zone && styles.inputError]} 
+                value={zone} 
+                onChangeText={(text) => {
+                  setZone(text);
+                  if (errors.zone) setErrors(prev => ({ ...prev, zone: null }));
+                }}
+                placeholder="e.g. A, B, C"
+                placeholderTextColor="#8E8E93"
+                autoCapitalize="characters"
+              />
+              {errors.zone && <Text style={styles.errorText}>{errors.zone}</Text>}
+            </View>
+            
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>
+                Shelf <Text style={styles.required}>*</Text>
+              </Text>
+              <TextInput 
+                style={[styles.input, errors.shelf && styles.inputError]} 
+                value={shelf} 
+                onChangeText={(text) => {
+                  setShelf(text);
+                  if (errors.shelf) setErrors(prev => ({ ...prev, shelf: null }));
+                }}
+                placeholder="e.g. 01, 02, 03"
+                placeholderTextColor="#8E8E93"
+              />
+              {errors.shelf && <Text style={styles.errorText}>{errors.shelf}</Text>}
+            </View>
+            
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>
+                Bin <Text style={styles.required}>*</Text>
+              </Text>
+              <TextInput 
+                style={[styles.input, errors.bin && styles.inputError]} 
+                value={bin} 
+                onChangeText={(text) => {
+                  setBin(text);
+                  if (errors.bin) setErrors(prev => ({ ...prev, bin: null }));
+                }}
+                placeholder="e.g. A, B, C"
+                placeholderTextColor="#8E8E93"
+                autoCapitalize="characters"
+              />
+              {errors.bin && <Text style={styles.errorText}>{errors.bin}</Text>}
+            </View>
+          </View>
+
+          {/* Coordinates */}
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <MaterialCommunityIcons name="crosshairs-gps" size={20} color="#5856D6" />
+              <Text style={styles.cardTitle}>Coordinates</Text>
+            </View>
+            
+            <View style={styles.coordinatesContainer}>
+              <View style={styles.coordinateInput}>
+                <Text style={styles.label}>
+                  X Position <Text style={styles.required}>*</Text>
+                </Text>
+                <TextInput 
+                  style={[styles.input, errors.x && styles.inputError]} 
+                  value={x} 
+                  onChangeText={(text) => {
+                    setX(text);
+                    if (errors.x) setErrors(prev => ({ ...prev, x: null }));
+                  }}
+                  placeholder="0.0"
+                  placeholderTextColor="#8E8E93"
+                  keyboardType="numeric"
+                />
+                {errors.x && <Text style={styles.errorText}>{errors.x}</Text>}
+              </View>
+              
+              <View style={styles.coordinateInput}>
+                <Text style={styles.label}>
+                  Y Position <Text style={styles.required}>*</Text>
+                </Text>
+                <TextInput 
+                  style={[styles.input, errors.y && styles.inputError]} 
+                  value={y} 
+                  onChangeText={(text) => {
+                    setY(text);
+                    if (errors.y) setErrors(prev => ({ ...prev, y: null }));
+                  }}
+                  placeholder="0.0"
+                  placeholderTextColor="#8E8E93"
+                  keyboardType="numeric"
+                />
+                {errors.y && <Text style={styles.errorText}>{errors.y}</Text>}
+              </View>
+            </View>
+            
+            {x && y && !errors.x && !errors.y && (
+              <View style={styles.coordinatePreview}>
+                <MaterialCommunityIcons name="map-marker" size={16} color="#5856D6" />
+                <Text style={styles.coordinateText}>
+                  Position: ({parseFloat(x).toFixed(1)}, {parseFloat(y).toFixed(1)})
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Initial Inventory */}
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <MaterialCommunityIcons name="package-variant" size={20} color="#34C759" />
+              <Text style={styles.cardTitle}>Initial Inventory</Text>
+            </View>
+            
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>
+                Item <Text style={styles.required}>*</Text>
+              </Text>
+              
+              {loadingItems ? (
+                <View style={styles.loadingItems}>
+                  <ActivityIndicator size="small" color="#007AFF" />
+                  <Text style={styles.loadingText}>Loading items...</Text>
+                </View>
+              ) : (
+                <>
+                  <View style={[styles.pickerContainer, errors.item && styles.inputError]}>
+                    <Picker
+                      selectedValue={itemId}
+                      onValueChange={(value) => {
+                        setItemId(value);
+                        if (errors.item) setErrors(prev => ({ ...prev, item: null }));
+                      }}
+                      style={styles.picker}
+                    >
+                      {inventoryItems.map((it) => (
+                        <Picker.Item key={it.id} label={`${it.name} (${it.sku})`} value={it.id} />
+                      ))}
+                    </Picker>
+                  </View>
+                  {errors.item && <Text style={styles.errorText}>{errors.item}</Text>}
+                  
+                  {selectedItem && (
+                    <View style={styles.selectionInfo}>
+                      <MaterialCommunityIcons name="package-variant" size={16} color="#34C759" />
+                      <Text style={styles.selectionText}>
+                        {selectedItem.name} • {selectedItem.sku} • {selectedItem.unit}
+                      </Text>
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
+            
+            <View style={styles.inventoryInputs}>
+              <View style={styles.inventoryInput}>
+                <Text style={styles.label}>
+                  Initial Quantity <Text style={styles.required}>*</Text>
+                </Text>
+                <TextInput 
+                  style={[styles.input, errors.quantity && styles.inputError]} 
+                  value={quantity} 
+                  onChangeText={(text) => {
+                    setQuantity(text);
+                    if (errors.quantity) setErrors(prev => ({ ...prev, quantity: null }));
+                  }}
+                  placeholder="0"
+                  placeholderTextColor="#8E8E93"
+                  keyboardType="numeric"
+                />
+                {errors.quantity && <Text style={styles.errorText}>{errors.quantity}</Text>}
+              </View>
+              
+              <View style={styles.inventoryInput}>
+                <Text style={styles.label}>
+                  Max Capacity <Text style={styles.required}>*</Text>
+                </Text>
+                <TextInput 
+                  style={[styles.input, errors.maxThreshold && styles.inputError]} 
+                  value={maxThreshold} 
+                  onChangeText={(text) => {
+                    setMaxThreshold(text);
+                    if (errors.maxThreshold) setErrors(prev => ({ ...prev, maxThreshold: null }));
+                  }}
+                  placeholder="100"
+                  placeholderTextColor="#8E8E93"
+                  keyboardType="numeric"
+                />
+                {errors.maxThreshold && <Text style={styles.errorText}>{errors.maxThreshold}</Text>}
+              </View>
+            </View>
+            
+            {quantity && maxThreshold && !errors.quantity && !errors.maxThreshold && (
+              <View style={styles.capacityPreview}>
+                <LinearGradient
+                  colors={['#34C759', '#30D158']}
+                  style={styles.capacityBar}
+                >
+                  <View style={[
+                    styles.capacityFill,
+                    { width: `${Math.min((parseInt(quantity) / parseInt(maxThreshold)) * 100, 100)}%` }
+                  ]} />
+                </LinearGradient>
+                <Text style={styles.capacityText}>
+                  {quantity} / {maxThreshold} ({Math.round((parseInt(quantity) / parseInt(maxThreshold)) * 100)}% full)
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Action Buttons */}
+          <View style={styles.actionContainer}>
+            <TouchableOpacity 
+              style={[styles.saveButton, saving && styles.saveButtonDisabled]} 
+              onPress={onSave}
+              disabled={saving}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={saving ? ['#C7C7CC', '#C7C7CC'] : ['#007AFF', '#5856D6']}
+                style={styles.saveGradient}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <MaterialCommunityIcons name="content-save" size={20} color="white" />
+                )}
+                <Text style={styles.saveText}>
+                  {saving ? 'Creating...' : 'Create Location'}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.cancelButton} 
+              onPress={() => navigation.goBack()}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  scrollContainer: { padding: 16 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  label: { fontWeight: 'bold', marginTop: 12 },
-  input: { borderWidth: 1, borderColor: '#ccc', padding: 8, borderRadius: 4, marginTop: 4 },
-  picker: { marginVertical: 8 },
-}); 
-// export default withScreenLayout(CreateLocationScreen, { title: 'CreateLocation' });
+  container: { 
+    flex: 1, 
+    backgroundColor: '#F8F9FA' 
+  },
+  
+  keyboardView: {
+    flex: 1,
+  },
+  
+  // Loading State
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#8E8E93',
+    marginTop: 12,
+  },
+  
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+  },
+  
+  // Header Section
+  headerSection: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  headerIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#F0F8FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    marginBottom: 8,
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: '#8E8E93',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  
+  // Card Styles
+  card: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+  },
+  
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginLeft: 8,
+  },
+  
+  // Form Styles
+  formGroup: {
+    marginBottom: 20,
+  },
+  
+  label: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1C1C1E',
+    marginBottom: 8,
+  },
+  
+  required: {
+    color: '#FF3B30',
+  },
+  
+  input: {
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#E1E5E9',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: '#1C1C1E',
+  },
+  
+  inputError: {
+    borderColor: '#FF3B30',
+    backgroundColor: '#FFF5F5',
+  },
+  
+  errorText: {
+    fontSize: 12,
+    color: '#FF3B30',
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  
+  // Picker Styles
+  pickerContainer: {
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#E1E5E9',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  
+  picker: {
+    height: 50,
+    color: '#1C1C1E',
+  },
+  
+  // Selection Info
+  selectionInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  
+  selectionText: {
+    fontSize: 14,
+    color: '#34C759',
+    fontWeight: '500',
+    marginLeft: 6,
+  },
+  
+  loadingItems: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+  },
+  
+  // Coordinates Section
+  coordinatesContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  
+  coordinateInput: {
+    flex: 1,
+  },
+  
+  coordinatePreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingHorizontal: 4,
+  },
+  
+  coordinateText: {
+    fontSize: 14,
+    color: '#5856D6',
+    fontWeight: '500',
+    marginLeft: 6,
+  },
+  
+  // Inventory Section
+  inventoryInputs: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  
+  inventoryInput: {
+    flex: 1,
+  },
+  
+  // Capacity Preview
+  capacityPreview: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  
+  capacityBar: {
+    height: 8,
+    backgroundColor: '#E1E5E9',
+    borderRadius: 4,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  
+  capacityFill: {
+    height: '100%',
+    backgroundColor: '#34C759',
+    borderRadius: 4,
+  },
+  
+  capacityText: {
+    fontSize: 14,
+    color: '#15803D',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  
+  // Action Container
+  actionContainer: {
+    marginTop: 20,
+  },
+  
+  saveButton: {
+    borderRadius: 12,
+    marginBottom: 12,
+    elevation: 4,
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+  },
+  
+  saveButtonDisabled: {
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  
+  saveGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+  },
+  
+  saveText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  
+  cancelButton: {
+    backgroundColor: '#F2F2F7',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  
+  cancelText: {
+    color: '#8E8E93',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});
+
 export default CreateLocationScreen;

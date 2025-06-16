@@ -2,6 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const http = require('http');
+const socketService = require('./services/socketService');
 let morgan;
 try { morgan = require('morgan'); } catch (e) { morgan = null; }
 
@@ -27,8 +29,19 @@ const routesRouter = require('./routes/routes');
 const documentsRouter = require('./routes/documents');
 const notificationsRouter = require('./routes/notifications');
 const announcementsRouter = require('./routes/announcements');
+const messagesRouter = require('./routes/messages');
 const skuAttributesRouter = require('./routes/skuAttributes');
 const suppliersRouter = require('./routes/suppliers');
+const wavesRouter = require('./routes/waves');
+const pickListsRouter = require('./routes/pickLists');
+const packingRouter = require('./routes/packing');
+// Phase 3: Receiving & Put-Away Operations
+const asnRouter = require('./routes/asns');
+const receivingRouter = require('./routes/receiving');
+const putAwayRouter = require('./routes/putaway');
+const dockRouter = require('./routes/dock');
+const crossdockRouter = require('./routes/crossdock');
+const cycleCountRouter = require('./routes/cycleCountRoutes');
 
 const app = express();
 app.use(cors());
@@ -62,9 +75,20 @@ app.use('/offers', offersRouter);
 app.use('/routes', routesRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/announcements', announcementsRouter);
+app.use('/api', messagesRouter);
 app.use('/api', documentsRouter);
 app.use('/sku-attributes', skuAttributesRouter);
 app.use('/suppliers', suppliersRouter);
+app.use('/waves', wavesRouter);
+app.use('/pick-lists', pickListsRouter);
+app.use('/packing', packingRouter);
+// Phase 3: Receiving & Put-Away Operations
+app.use('/asns', asnRouter);
+app.use('/receiving', receivingRouter);
+app.use('/putaway', putAwayRouter);
+app.use('/dock', dockRouter);
+app.use('/crossdock', crossdockRouter);
+app.use('/cycle-counts', cycleCountRouter);
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
@@ -81,6 +105,12 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
+
+// Create HTTP server and initialize Socket.IO
+const server = http.createServer(app);
+socketService.init(server);
+
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
+  console.log(`WebSocket server initialized`);
 });

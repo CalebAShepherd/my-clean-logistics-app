@@ -16,6 +16,13 @@ const SettingsContext = createContext({
   reloadSettings: async () => {},
 });
 
+// Global branding refresh callback to avoid circular dependencies
+let brandingRefreshCallback = null;
+
+export const setBrandingRefreshCallback = (callback) => {
+  brandingRefreshCallback = callback;
+};
+
 export const SettingsProvider = ({ children }) => {
   const { userToken } = useContext(AuthContext);
   const [settings, setSettings] = useState(null);
@@ -50,6 +57,13 @@ export const SettingsProvider = ({ children }) => {
       }
       const data = await res.json();
       setSettings(data);
+      
+      // Refresh company branding when settings are updated
+      // This will update login/signup screens automatically
+      if (brandingRefreshCallback) {
+        brandingRefreshCallback();
+      }
+      
       return data;
     } catch (e) {
       console.error('Settings update error:', e);

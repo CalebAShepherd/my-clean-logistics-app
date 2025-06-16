@@ -51,6 +51,18 @@ function WarehouseInventoryScreen({ navigation }) {
     loadItems();
   }, [userToken, currentWarehouse]);
 
+  // Aggregate duplicate items by summing quantities
+  const uniqueItems = Object.values(
+    items.reduce((acc, wi) => {
+      if (acc[wi.itemId]) {
+        acc[wi.itemId].quantity += wi.quantity;
+      } else {
+        acc[wi.itemId] = { ...wi };
+      }
+      return acc;
+    }, {})
+  );
+
   if (!settings?.hasWarehouses) {
     return (
       <SafeAreaView style={styles.center}>
@@ -67,7 +79,7 @@ function WarehouseInventoryScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <InternalHeader navigation={navigation} title="Warehouse Inventory" />
       <FlatList
-        data={items}
+        data={uniqueItems}
         contentContainerStyle={styles.listContent}
         keyExtractor={(item) => item.itemId}
         renderItem={({ item }) => (

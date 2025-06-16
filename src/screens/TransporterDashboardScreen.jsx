@@ -1,6 +1,7 @@
 import React, { useEffect, useContext, useState, useCallback, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, Alert, RefreshControl } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
 import { listOffers } from '../api/offers';
@@ -13,6 +14,7 @@ import polyline from '@mapbox/polyline';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native';
 import { updateShipmentStatus } from '../api/shipments';
+import { fetchNotifications } from '../api/notifications';
 
 export default function TransporterDashboardScreen({ navigation }) {
   const { user, userToken } = useContext(AuthContext);
@@ -23,6 +25,9 @@ export default function TransporterDashboardScreen({ navigation }) {
   const [myRoutes, setMyRoutes] = useState([]);
   const [offers, setOffers] = useState([]);
   const [loadingRoutes, setLoadingRoutes] = useState(false);
+  const [msgUnreadCount, setMsgUnreadCount] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingOffers, setLoadingOffers] = useState(false);
 
   // Mock state for stops
   const [routeStarted, setRouteStarted] = useState(false);
@@ -68,25 +73,10 @@ export default function TransporterDashboardScreen({ navigation }) {
 
   // Load upcoming routes sorted by pickup date
   useEffect(() => {
-    if (!user?.id) return;
-    (async () => {
-      try {
-        const routes = await listRoutes(userToken, user.id);
-        const upcoming = routes
-          .filter(r => r.RouteShipment?.length > 0)
-          .filter(r => new Date(r.RouteShipment[0].Shipment.shipmentDate) >= new Date())
-          .sort((a, b) => new Date(a.RouteShipment[0].Shipment.shipmentDate) - new Date(b.RouteShipment[0].Shipment.shipmentDate))
-          .slice(0, 4)
-          .map(r => ({
-            id: r.id,
-            summary: `${r.RouteShipment[0].Shipment.pickupCity}, ${r.RouteShipment[0].Shipment.pickupState} → ${r.RouteShipment[r.RouteShipment.length - 1].Shipment.deliveryCity}, ${r.RouteShipment[r.RouteShipment.length - 1].Shipment.deliveryState}`,
-            date: new Date(r.RouteShipment[0].Shipment.shipmentDate).toLocaleDateString(),
-          }));
-        setMyRoutes(upcoming);
-      } catch (e) {
-        console.error('Error loading upcoming routes:', e);
-      }
-    })();
+    if (userToken && user?.id) {
+      loadUpcomingRoutes();
+      loadOffers();
+    }
   }, [userToken, user?.id]);
 
   // Background location sharing for transporters
@@ -367,61 +357,197 @@ export default function TransporterDashboardScreen({ navigation }) {
     })();
   }, []);
 
+  const loadMsgUnread = async () => {
+    try {
+      const data = await fetchNotifications(userToken);
+      setMsgUnreadCount(data.filter(n => n.type === 'message' && !n.isRead).length);
+    } catch (err) {
+      console.error('Error loading message unread count:', err);
+    }
+  };
+
+  const loadOffers = async () => {
+    if (!userToken || !user?.id) return;
+    setLoadingOffers(true);
+    try {
+      const offerData = await listOffers(userToken, user.id);
+      setOffers(offerData || []);
+    } catch (err) {
+      console.error('Error loading offers:', err);
+    } finally {
+      setLoadingOffers(false);
+    }
+  };
+
+  const loadUpcomingRoutes = async () => {
+    if (!user?.id) return;
+    try {
+      const routes = await listRoutes(userToken, user.id);
+      const upcoming = routes
+        .filter(r => r.RouteShipment?.length > 0)
+        .filter(r => new Date(r.RouteShipment[0].Shipment.shipmentDate) >= new Date())
+        .sort((a, b) => new Date(a.RouteShipment[0].Shipment.shipmentDate) - new Date(b.RouteShipment[0].Shipment.shipmentDate))
+        .slice(0, 4)
+        .map(r => ({
+          id: r.id,
+          summary: `${r.RouteShipment[0].Shipment.pickupCity}, ${r.RouteShipment[0].Shipment.pickupState} → ${r.RouteShipment[r.RouteShipment.length - 1].Shipment.deliveryCity}, ${r.RouteShipment[r.RouteShipment.length - 1].Shipment.deliveryState}`,
+          date: new Date(r.RouteShipment[0].Shipment.shipmentDate).toLocaleDateString(),
+        }));
+      setMyRoutes(upcoming);
+    } catch (e) {
+      console.error('Error loading upcoming routes:', e);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([
+      loadMsgUnread(),
+      loadOffers(),
+      loadUpcomingRoutes()
+    ]);
+    setRefreshing(false);
+  };
+
+  // Initial load
+  useEffect(() => {
+    if (userToken) loadMsgUnread();
+  }, [userToken]);
+
+  // Refresh when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      if (userToken) loadMsgUnread();
+    }, [userToken])
+  );
+
+  // Poll for updates every 5 seconds when screen is focused
+  useEffect(() => {
+    if (!userToken) return;
+    
+    const interval = setInterval(() => {
+      loadMsgUnread();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [userToken]);
+
   if (isRestoring) {
     return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}><ActivityIndicator size="large" /></View>;
   }
 
   return (
-    <SafeAreaView style={[styles.screen]}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Dashboard</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <TouchableOpacity style={{ marginRight: 12 }} onPress={() => navigation.navigate('Notifications')}>
-            <MaterialCommunityIcons name="bell-outline" size={26} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-            <MaterialCommunityIcons name="account-circle" size={32} color="#fff" />
-          </TouchableOpacity>
+    <LinearGradient
+      colors={['#667eea', '#764ba2']}
+      style={styles.container}
+    >
+      <SafeAreaView style={styles.safeArea}>
+        {/* Modern Header */}
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <View>
+              <Text style={styles.headerTitle}>Dashboard</Text>
+              <Text style={styles.headerSubtitle}>Welcome back, {user?.username}</Text>
+            </View>
+            <View style={styles.headerIcons}>
+              <TouchableOpacity 
+                style={styles.headerIconButton} 
+                onPress={() => navigation.navigate('Notifications')}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="bell-outline" size={20} color="white" />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.headerIconButton} 
+                onPress={() => navigation.navigate('Conversations')}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="message-outline" size={20} color="white" />
+                {msgUnreadCount > 0 && <View style={styles.badge} />}
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.profileButton}
+                onPress={() => navigation.navigate('Settings')}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="account-circle" size={22} color="white" />
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
-      </View>
 
-      <ScrollView contentContainerStyle={[styles.container]}>
-        {/* Assigned Route Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Assigned Route</Text>
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="white"
+              colors={['#667eea']}
+            />
+          }
+          showsVerticalScrollIndicator={false}
+        >
+                  {/* Assigned Route Card */}
+          <View style={styles.card}>
+            <LinearGradient
+              colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.7)']}
+              style={styles.cardGradient}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                 <MaterialCommunityIcons name="truck" size={20} color="#667eea" style={{ marginRight: 8 }} />
+                 <Text style={styles.cardTitle}>Assigned Route</Text>
+               </View>
           {!selectedRouteId ? (
             <View style={{ alignItems: 'center', marginVertical: 24 }}>
-              <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate('Routes', { onSelectRoute: (routeId) => setSelectedRouteId(routeId), selectedRouteId })}>
-                <Text style={styles.primaryButtonText}>Select Route</Text>
+              <TouchableOpacity 
+                style={styles.primaryButton} 
+                onPress={() => navigation.navigate('Routes', { onSelectRoute: (routeId) => setSelectedRouteId(routeId), selectedRouteId })}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#667eea', '#764ba2']}
+                  style={styles.primaryButtonGradient}
+                >
+                  <Text style={styles.primaryButtonText}>Select Route</Text>
+                </LinearGradient>
               </TouchableOpacity>
             </View>
           ) : (
             <>
               <View style={{ marginBottom: 12 }}>
                 {stops.map((stop, idx) => {
-                  let color = '#222', iconColor = '#222', fontWeight = 'normal';
-                  if (stop.status === 'SKIPPED') { color = '#c0392b'; iconColor = '#c0392b'; }
-                  else if (stop.status === 'COMPLETED') { color = '#bbb'; iconColor = '#bbb'; }
-                  else if (idx === currentStopIdx) { color = '#0074D9'; iconColor = '#0074D9'; fontWeight = 'bold'; }
+                  let color = '#1C1C1E', iconColor = '#667eea', fontWeight = '500';
+                  if (stop.status === 'SKIPPED') { color = '#FF3B30'; iconColor = '#FF3B30'; fontWeight = '600'; }
+                  else if (stop.status === 'COMPLETED') { color = '#8E8E93'; iconColor = '#8E8E93'; fontWeight = '400'; }
+                  else if (idx === currentStopIdx) { color = '#667eea'; iconColor = '#667eea'; fontWeight = '600'; }
                   return (
-                    <View key={idx} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
-                      <FontAwesome5 name={stop.type === 'pickup' ? 'arrow-circle-up' : 'arrow-circle-down'} size={18} color={iconColor} style={{ marginRight: 8 }} />
-                      <Text style={{ flex: 1, color, fontWeight }}>{stop.label}</Text>
-                      <Text style={{ color, fontWeight, marginLeft: 8 }}>{stop.eta ? new Date(stop.eta).toLocaleString() : '-'}</Text>
+                    <View key={idx} style={styles.routeStopRow}>
+                      <FontAwesome5 
+                        name={stop.type === 'pickup' ? 'arrow-circle-up' : 'arrow-circle-down'} 
+                        size={20} 
+                        color={iconColor} 
+                        style={{ marginRight: 12 }} 
+                      />
+                      <Text style={{ flex: 1, color, fontWeight, fontSize: 15 }}>{stop.label}</Text>
+                      <Text style={{ color, fontWeight, marginLeft: 12, fontSize: 13 }}>
+                        {stop.eta ? new Date(stop.eta).toLocaleString() : '-'}
+                      </Text>
                       {idx === currentStopIdx && stop.status === 'PENDING' && routeStarted && (
-                        <TouchableOpacity style={{ marginLeft: 8, backgroundColor: '#e74c3c', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 }} onPress={() => handleSkip(stop)}>
-                          <Text style={{ color: '#fff', fontWeight: 'bold' }}>Skip</Text>
+                        <TouchableOpacity style={styles.skipButton} onPress={() => handleSkip(stop)}>
+                          <Text style={styles.skipButtonText}>Skip</Text>
                         </TouchableOpacity>
                       )}
                     </View>
                   );
                 })}
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-                <MaterialCommunityIcons name="truck" size={18} color="#0074D9" />
+              <View style={styles.truckInfo}>
+                <MaterialCommunityIcons name="truck" size={20} color="#667eea" />
                 <Text style={styles.truckText}>Truck #42</Text>
               </View>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <TouchableOpacity style={styles.outlineButton} onPress={() => {
                   if (!routeStarted) {
                     setRouteStarted(true);
@@ -442,24 +568,39 @@ export default function TransporterDashboardScreen({ navigation }) {
                   style={[styles.primaryButton, { opacity: routeStarted ? 1 : 0.5 }]}
                   disabled={!routeStarted}
                   onPress={() => handleComplete(currentStop)}
+                  activeOpacity={0.8}
                 >
-                  <Text style={styles.primaryButtonText}>{actionText}</Text>
+                  <LinearGradient
+                    colors={['#667eea', '#764ba2']}
+                    style={styles.primaryButtonGradient}
+                  >
+                    <Text style={styles.primaryButtonText}>{actionText}</Text>
+                  </LinearGradient>
                 </TouchableOpacity>
               </View>
             </>
           )}
-        </View>
+            </LinearGradient>
+          </View>
 
         {/* Current Route: Table stacked above map */}
         {selectedRouteId && currentRoute && (
           <View style={styles.card}>
-            <TouchableOpacity
-              onPress={() => currentRoute?.id && navigation.navigate('RouteDetail', { routeId: currentRoute.id })}
-              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}
+            <LinearGradient
+              colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.7)']}
+              style={styles.cardGradient}
             >
-              <Text style={styles.cardTitle}>Current Route</Text>
-              <MaterialCommunityIcons name="chevron-right" size={20} color="#0074D9" />
-            </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => currentRoute?.id && navigation.navigate('RouteDetail', { routeId: currentRoute.id })}
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}
+                activeOpacity={0.7}
+              >
+                                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                   <MaterialCommunityIcons name="map-marker-path" size={20} color="#667eea" style={{ marginRight: 8 }} />
+                   <Text style={styles.cardTitle}>Current Route</Text>
+                 </View>
+                <MaterialCommunityIcons name="chevron-right" size={20} color="#667eea" />
+              </TouchableOpacity>
             <View style={{ marginBottom: 10 }}>
               <View style={styles.tableRowHeader}>
                 <Text style={[styles.tableHeader, { flex: 1 }]}>Pickup</Text>
@@ -477,7 +618,7 @@ export default function TransporterDashboardScreen({ navigation }) {
                 <View style={styles.tableRow}><Text style={styles.tableCell}>No remaining stops</Text></View>
               )}
             </View>
-            <View style={{ height: 180, backgroundColor: '#e6f0fa', borderRadius: 8, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+            <View style={{ height: 200, backgroundColor: 'rgba(102, 126, 234, 0.1)', borderRadius: 16, justifyContent: 'center', alignItems: 'center', overflow: 'hidden', marginTop: 8 }}>
               {uniqueRoutePoints.length > 1 ? (
                 <MapView
                   style={{ flex: 1, width: '100%' }}
@@ -488,7 +629,7 @@ export default function TransporterDashboardScreen({ navigation }) {
                     longitudeDelta: 2,
                   }}
                 >
-                  <Polyline coordinates={uniqueRoutePoints} strokeColor="#0074D9" strokeWidth={4} />
+                  <Polyline coordinates={uniqueRoutePoints} strokeColor="#667eea" strokeWidth={4} />
                   {uniqueRoutePoints.map((coord, idx) => (
                     <Marker key={idx} coordinate={coord} />
                   ))}
@@ -501,25 +642,34 @@ export default function TransporterDashboardScreen({ navigation }) {
                   )}
                 </MapView>
               ) : (
-                <MaterialCommunityIcons name="map" size={48} color="#0074D9" />
+                                  <MaterialCommunityIcons name="map" size={48} color="#667eea" />
               )}
-            </View>
+              </View>
+            </LinearGradient>
           </View>
         )}
 
         {/* My Routes: City-to-city summary, no status column */}
         <View style={styles.card}>
-          <TouchableOpacity
-            onPress={() => navigation.navigate('Routes', {
-              onSelectRoute: (routeId) => setSelectedRouteId(routeId),
-              selectedRouteId,
-              routeStarted,
-            })}
-            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}
+          <LinearGradient
+            colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.7)']}
+            style={styles.cardGradient}
           >
-            <Text style={styles.cardTitle}>My Routes</Text>
-            <MaterialCommunityIcons name="chevron-right" size={20} color="#0074D9" />
-          </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Routes', {
+                onSelectRoute: (routeId) => setSelectedRouteId(routeId),
+                selectedRouteId,
+                routeStarted,
+              })}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}
+              activeOpacity={0.7}
+            >
+                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                 <MaterialCommunityIcons name="road-variant" size={20} color="#667eea" style={{ marginRight: 8 }} />
+                 <Text style={styles.cardTitle}>My Routes</Text>
+               </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color="#667eea" />
+            </TouchableOpacity>
           <View style={styles.tableRowHeader}>
             <Text style={[styles.tableHeader, { flex: 2 }]}>Route</Text>
             <Text style={[styles.tableHeader, { flex: 1 }]}>Date</Text>
@@ -530,17 +680,26 @@ export default function TransporterDashboardScreen({ navigation }) {
               <Text style={styles.tableCell}>{route.date}</Text>
             </View>
           ))}
+          </LinearGradient>
         </View>
 
         {/* My Offers: pending offers for transporter */}
         <View style={styles.card}>
-          <TouchableOpacity
-            onPress={() => navigation.navigate('Offers')}
-            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}
+          <LinearGradient
+            colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.7)']}
+            style={styles.cardGradient}
           >
-            <Text style={styles.cardTitle}>My Offers</Text>
-            <MaterialCommunityIcons name="chevron-right" size={20} color="#0074D9" />
-          </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Offers')}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}
+              activeOpacity={0.7}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                 <MaterialCommunityIcons name="clipboard-text" size={20} color="#667eea" style={{ marginRight: 8 }} />
+                 <Text style={styles.cardTitle}>My Offers</Text>
+               </View>
+              <MaterialCommunityIcons name="chevron-right" size={20} color="#667eea" />
+            </TouchableOpacity>
           <View style={styles.tableRowHeader}>
             <Text style={[styles.tableHeader, { flex: 2 }]}>Route</Text>
             <Text style={[styles.tableHeader, { flex: 1 }]}>Date</Text>
@@ -561,34 +720,217 @@ export default function TransporterDashboardScreen({ navigation }) {
               <Text style={styles.tableCell}>No pending offers</Text>
             </View>
           )}
+          </LinearGradient>
         </View>
-      </ScrollView>
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#004080', padding: 16, borderBottomEndRadius: 16, borderBottomStartRadius: 16 },
-  headerTitle: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
-  container: { padding: 16, paddingBottom: 0 },
-  card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 18, elevation: 2 },
-  cardTitle: { fontSize: 17, fontWeight: 'bold', marginBottom: 8 },
+  container: {
+    flex: 1,
+  },
+  safeArea: {
+    flex: 1,
+  },
+  
+  // Header Styles
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 24,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: 'white',
+    marginBottom: 2,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  headerIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+    position: 'relative',
+  },
+  profileButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  badge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF3B30',
+  },
+
+  // ScrollView Styles
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 24,
+    paddingBottom: 80,
+  },
+
+  // Card Styles
+  card: {
+    borderRadius: 20,
+    marginBottom: 24,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+  },
+  cardGradient: {
+    borderRadius: 20,
+    padding: 20,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 0,
+  },
   statusBadgeInProgress: { backgroundColor: '#1abc9c', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 2, marginRight: 8 },
   statusBadgeText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
   routeStop: { fontSize: 15, marginBottom: 2 },
   dot: { color: '#004080', fontWeight: 'bold' },
   time: { color: '#888', fontSize: 13 },
-  truckText: { marginLeft: 4, color: '#0074D9', fontWeight: 'bold' },
-  outlineButton: { borderWidth: 1, borderColor: '#0074D9', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 18, marginRight: 8 },
-  outlineButtonText: { color: '#0074D9', fontWeight: 'bold' },
-  primaryButton: { backgroundColor: '#0074D9', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 18 },
-  primaryButtonText: { color: '#fff', fontWeight: 'bold' },
-  tableRowHeader: { flexDirection: 'row', backgroundColor: '#f0f0f0', paddingVertical: 6, borderTopLeftRadius: 8, borderTopRightRadius: 8 },
-  tableHeader: { fontWeight: 'bold', fontSize: 14, flex: 1, textAlign: 'center' },
-  tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#eee', paddingVertical: 6 },
-  tableCell: { flex: 1, textAlign: 'center', fontSize: 13 },
-  statusGreen: { color: '#27ae60', fontWeight: 'bold' },
-  statusOrange: { color: '#e67e22', fontWeight: 'bold' },
-  statusBlue: { color: '#0074D9', fontWeight: 'bold' },
+  truckText: {
+    marginLeft: 8,
+    color: '#667eea',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  outlineButton: {
+    borderWidth: 2,
+    borderColor: '#667eea',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginRight: 4,
+    backgroundColor: 'rgba(102, 126, 234, 0.1)'
+  },
+  outlineButtonText: {
+    color: '#667eea',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  primaryButton: {
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    elevation: 4,
+    shadowColor: '#667eea',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+  },
+  primaryButtonGradient: {
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  primaryButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  tableRowHeader: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+    paddingVertical: 12,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+  },
+  tableHeader: {
+    fontWeight: '600',
+    fontSize: 14,
+    flex: 1,
+    textAlign: 'center',
+    color: '#667eea',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+    paddingVertical: 12,
+    backgroundColor: 'white',
+  },
+  tableCell: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 14,
+    color: '#1C1C1E',
+  },
+  statusGreen: { color: '#34C759', fontWeight: '600' },
+  statusOrange: { color: '#FF9500', fontWeight: '600' },
+  statusBlue: { color: '#667eea', fontWeight: '600' },
+  
+  // Route Status Styles
+  routeStopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  skipButton: {
+    backgroundColor: '#FF3B30',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginLeft: 12,
+  },
+  skipButtonText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  truckInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+  },
+  truckText: {
+    marginLeft: 8,
+    color: '#667eea',
+    fontWeight: '600',
+    fontSize: 16,
+  },
 }); 

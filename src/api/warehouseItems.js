@@ -62,7 +62,8 @@ export async function createWarehouseItem(token, data) {
  * Update an existing warehouse item record
  */
 export async function updateWarehouseItem(token, warehouseId, itemId, data) {
-  const res = await fetch(`${API_URL}/warehouse-items/${warehouseId}/${itemId}`, {
+  const locationId = data.locationId;
+  const res = await fetch(`${API_URL}/warehouse-items/${warehouseId}/${itemId}/${locationId}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -86,8 +87,8 @@ export async function updateWarehouseItem(token, warehouseId, itemId, data) {
 /**
  * Delete a warehouse item record
  */
-export async function deleteWarehouseItem(token, warehouseId, itemId) {
-  const res = await fetch(`${API_URL}/warehouse-items/${warehouseId}/${itemId}`, {
+export async function deleteWarehouseItem(token, warehouseId, itemId, locationId) {
+  const res = await fetch(`${API_URL}/warehouse-items/${warehouseId}/${itemId}/${locationId}`, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   });

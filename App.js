@@ -6,17 +6,20 @@ import { NavigationContainer } from '@react-navigation/native';
 import AppNavigator from './src/navigation/AppNavigator';
 import { AuthProvider } from './src/context/AuthContext';
 import { SettingsProvider } from './src/context/SettingsContext';
+import { CompanyBrandingProvider } from './src/context/CompanyBrandingContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 
 export default function App() {
   return (
-    <AuthProvider>
-      <SettingsProvider>
-        <ThemeProvider>
-          <AppContent />
-        </ThemeProvider>
-      </SettingsProvider>
-    </AuthProvider>
+    <CompanyBrandingProvider>
+      <AuthProvider>
+        <SettingsProvider>
+          <ThemeProvider>
+            <AppContent />
+          </ThemeProvider>
+        </SettingsProvider>
+      </AuthProvider>
+    </CompanyBrandingProvider>
   );
 }
 

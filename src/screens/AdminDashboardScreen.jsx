@@ -1,6 +1,6 @@
-// import withScreenLayout from '../components/withScreenLayout';
 import React, { useEffect, useContext, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
@@ -10,11 +10,13 @@ import { fetchFleetLocations } from '../api/locations';
 import { fetchRecentShipments } from '../api/shipments';
 import { SafeAreaView } from 'react-native';
 import { fetchNotifications } from '../api/notifications';
+import { useFocusEffect } from '@react-navigation/native';
 
 function AdminDashboardScreen({ navigation }) {
-  const { userToken } = useContext(AuthContext);
+  const { userToken, user } = useContext(AuthContext);
   const { settings } = useSettings();
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifUnreadCount, setNotifUnreadCount] = useState(0);
+  const [msgUnreadCount, setMsgUnreadCount] = useState(0);
   const [inTransitCount, setInTransitCount] = useState(null);
   const [loadingInTransit, setLoadingInTransit] = useState(false);
   const [onTimeLate, setOnTimeLate] = useState(null);
@@ -23,53 +25,113 @@ function AdminDashboardScreen({ navigation }) {
   const [loadingFleet, setLoadingFleet] = useState(true);
   const [recentShipments, setRecentShipments] = useState([]);
   const [loadingRecent, setLoadingRecent] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadDashboardData = async () => {
+    if (!userToken) return;
+
+    try {
+      const [transitData, onTimeData, fleetData, shipmentsData] = await Promise.allSettled([
+        fetchInTransitCount(userToken),
+        fetchOnTimeLate(userToken),
+        fetchFleetLocations(userToken),
+        fetchRecentShipments(userToken)
+      ]);
+
+      if (transitData.status === 'fulfilled') {
+        setInTransitCount(transitData.value.total);
+      } else {
+        console.error('Error loading in-transit count:', transitData.reason);
+      }
+
+      if (onTimeData.status === 'fulfilled') {
+        setOnTimeLate(onTimeData.value);
+      } else {
+        console.error('Error loading on-time stats:', onTimeData.reason);
+      }
+
+      if (fleetData.status === 'fulfilled') {
+        setFleetLocations(fleetData.value);
+      } else {
+        console.error('Error loading fleet locations:', fleetData.reason);
+      }
+
+      if (shipmentsData.status === 'fulfilled') {
+        setRecentShipments(shipmentsData.value);
+      } else {
+        console.error('Error loading recent shipments:', shipmentsData.reason);
+      }
+
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    }
+  };
 
   useEffect(() => {
-    setLoadingInTransit(true);
-    fetchInTransitCount(userToken)
-      .then(data => setInTransitCount(data.total))
-      .catch(err => console.error('Error loading in-transit count:', err))
-      .finally(() => setLoadingInTransit(false));
+    if (userToken) {
+      setLoadingInTransit(true);
+      setLoadingOnTimeLate(true);
+      setLoadingFleet(true);
+      setLoadingRecent(true);
+      
+      loadDashboardData().finally(() => {
+        setLoadingInTransit(false);
+        setLoadingOnTimeLate(false);
+        setLoadingFleet(false);
+        setLoadingRecent(false);
+      });
 
-    setLoadingOnTimeLate(true);
-    fetchOnTimeLate(userToken)
-      .then(data => setOnTimeLate(data))
-      .catch(err => console.error('Error loading on-time stats:', err))
-      .finally(() => setLoadingOnTimeLate(false));
-
-    // Initial fetch
-    setLoadingFleet(true);
-    fetchFleetLocations(userToken)
-      .then(data => setFleetLocations(data))
-      .catch(err => console.error('Error loading fleet locations:', err))
-      .finally(() => setLoadingFleet(false));
-
-    // Fetch recent shipments
-    setLoadingRecent(true);
-    fetchRecentShipments(userToken)
-      .then(data => setRecentShipments(data))
-      .catch(err => console.error('Error loading recent shipments:', err))
-      .finally(() => setLoadingRecent(false));
-
-    // Poll every 30 seconds
-    const intervalId = setInterval(() => {
-      fetchFleetLocations(userToken)
-        .then(data => setFleetLocations(data))
-        .catch(err => console.error('Error loading fleet locations:', err));
-    }, 30000);
-    return () => clearInterval(intervalId);
+      // Poll fleet locations every 30 seconds
+      const intervalId = setInterval(() => {
+        fetchFleetLocations(userToken)
+          .then(data => setFleetLocations(data))
+          .catch(err => console.error('Error loading fleet locations:', err));
+      }, 30000);
+      
+      return () => clearInterval(intervalId);
+    }
   }, [userToken]);
 
-  useEffect(() => {
-    async function loadUnread() {
-      try {
-        const data = await fetchNotifications(userToken);
-        setUnreadCount(data.filter(n => !n.isRead).length);
-      } catch (e) {
-        console.error('Error loading unread count:', e);
-      }
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([
+      loadDashboardData(),
+      loadUnread()
+    ]);
+    setRefreshing(false);
+  };
+
+  const loadUnread = async () => {
+    try {
+      const data = await fetchNotifications(userToken);
+      setNotifUnreadCount(data.filter(n => n.type !== 'message' && !n.isRead).length);
+      setMsgUnreadCount(data.filter(n => n.type === 'message' && !n.isRead).length);
+    } catch (err) {
+      console.error('Error loading unread counts:', err);
     }
+  };
+
+  // Initial load
+  useEffect(() => {
     if (userToken) loadUnread();
+  }, [userToken]);
+
+  // Refresh when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      if (userToken) loadUnread();
+    }, [userToken])
+  );
+
+  // Poll for updates every 5 seconds when screen is focused
+  useEffect(() => {
+    if (!userToken) return;
+    
+    const interval = setInterval(() => {
+      loadUnread();
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, [userToken]);
 
   // Calculate map region to fit all markers
@@ -99,311 +161,436 @@ function AdminDashboardScreen({ navigation }) {
   }
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Dashboard</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <TouchableOpacity style={{ marginRight: 12 }} onPress={() => navigation.navigate('Notifications')}>
-            <View style={{ position: 'relative' }}>
-              <MaterialCommunityIcons name="bell-outline" size={26} color="#fff" />
-              {unreadCount > 0 && <View style={styles.badge} />}
+    <LinearGradient
+      colors={['#667eea', '#764ba2']}
+      style={styles.container}
+    >
+      <SafeAreaView style={styles.safeArea}>
+        {/* Modern Header */}
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <View>
+              <Text style={styles.headerTitle}>Dashboard</Text>
+              <Text style={styles.headerSubtitle}>Administrator</Text>
             </View>
-          </TouchableOpacity>
-          <TouchableOpacity style={{ marginRight: 12 }} onPress={() => navigation.navigate('Announcements')}>
-            <MaterialCommunityIcons name="bullhorn-outline" size={26} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-            <MaterialCommunityIcons name="account-circle" size={32} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </View>
-      <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>In Transit</Text>
-            {loadingInTransit ? (
-              <ActivityIndicator size="large" color="#333" />
-            ) : (
-              <Text style={styles.statNumber}>{inTransitCount ?? '-'}</Text>
-            )}
-            <Text style={styles.statSub}>Shipments</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>On-Time</Text>
-            {loadingOnTimeLate ? (
-              <ActivityIndicator size="large" color="#333" />
-            ) : (
-              <Text style={styles.statNumber}>
-                {onTimeLate ? Math.round((onTimeLate.onTime / (onTimeLate.onTime + onTimeLate.late)) * 100) + '%' : '-'}
-              </Text>
-            )}
-            <Text style={styles.statSub}>Rate</Text>
-          </View>
-        </View>
-
-        <View style={styles.sectionList}>
-          <TouchableOpacity style={styles.listItem} onPress={() => navigation.navigate('Shipments')}>
-            <MaterialCommunityIcons name="package-variant" size={24} color="#333" />
-            <Text style={styles.listText}>View Shipments</Text>
-            <MaterialCommunityIcons name="chevron-right" size={24} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.listItem} onPress={() => navigation.navigate('User Management')}>
-            <MaterialCommunityIcons name="account-group" size={24} color="#333" />
-            <Text style={styles.listText}>Manage Users</Text>
-            <MaterialCommunityIcons name="chevron-right" size={24} />
-          </TouchableOpacity>
-          {settings.useThirdPartyCarriers && (
-            <TouchableOpacity style={styles.listItem} onPress={() => navigation.navigate('Carrier Management')}>
-              <MaterialCommunityIcons name="truck" size={24} color="#333" />
-              <Text style={styles.listText}>Manage Carriers</Text>
-              <MaterialCommunityIcons name="chevron-right" size={24} />
-            </TouchableOpacity>
-          )}
-          {settings.ownTransporters && (
-            <TouchableOpacity style={styles.listItem} onPress={() => navigation.navigate('Transport Management')}>
-              <MaterialCommunityIcons name="truck" size={24} color="#333" />
-              <Text style={styles.listText}>Transport Management</Text>
-              <MaterialCommunityIcons name="chevron-right" size={24} />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity style={styles.listItem} onPress={() => navigation.navigate('Analytics')}>
-            <MaterialCommunityIcons name="chart-line" size={24} color="#333" />
-            <Text style={styles.analyticsText}>Analytics</Text>
-            <MaterialCommunityIcons name="chevron-right" size={24} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.listItem} onPress={() => navigation.navigate('Company Settings')}>
-            <MaterialCommunityIcons name="cog-outline" size={24} color="#333" />
-            <Text style={styles.listText}>Company Settings</Text>
-            <MaterialCommunityIcons name="chevron-right" size={24} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Live Fleet Location Map */}
-        {settings.ownTransporters && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Live Fleet Location</Text>
-            {loadingFleet ? (
-              <ActivityIndicator style={{ marginVertical: 32 }} size="large" />
-            ) : fleetLocations.length === 0 ? (
-              <View style={styles.mapPlaceholder}><Text>No fleet locations available.</Text></View>
-            ) : (
-              <MapView
-                style={styles.map}
-                initialRegion={mapRegion}
-                region={mapRegion}
-                showsUserLocation={false}
-                showsMyLocationButton={false}
-                pointerEvents="none"
+            <View style={styles.headerIcons}>
+              <TouchableOpacity 
+                style={styles.headerIconButton} 
+                onPress={() => navigation.navigate('Notifications')}
+                activeOpacity={0.7}
               >
-                {fleetLocations.map(loc => (
-                  <Marker
-                    key={loc.userId}
-                    coordinate={{ latitude: loc.latitude, longitude: loc.longitude }}
-                    title={loc.User?.username || 'Transporter'}
-                    description={loc.User?.email || ''}
-                    pinColor="#0074D9"
-                  />
-                ))}
-              </MapView>
-            )}
-          </View>
-        )}
-
-        {/* Recent Shipments Table */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Recent Shipments</Text>
-          {loadingRecent ? (
-            <ActivityIndicator style={{ marginVertical: 32 }} size="large" />
-          ) : recentShipments.length === 0 ? (
-            <View style={styles.tablePlaceholder}><Text>No recent shipments.</Text></View>
-          ) : (
-            <View style={styles.table}>
-              <View style={styles.tableRowHeader}>
-              <Text style={[styles.tableHeader]}>Client</Text>
-                <Text style={[styles.tableHeader]}>Status</Text>
-                <Text style={[styles.tableHeader]}>ETA</Text>
-              </View>
-              {recentShipments.map(s => (
-                <TouchableOpacity key={s.id} onPress={() => navigation.navigate('Shipment Details', { id: s.id })}>
-                  <View style={styles.tableRow}>
-                    <Text style={styles.tableCell}>{s.client}</Text>
-                    <Text style={[styles.tableCell, s.status === 'IN_TRANSIT' ? styles.inTransit : null]}>{s.status.replace('_', ' ')}</Text>
-                    <Text style={styles.tableCell}>{s.eta ? new Date(s.eta).toLocaleString() : '-'}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
+                <MaterialCommunityIcons name="bell-outline" size={20} color="white" />
+                {notifUnreadCount > 0 && <View style={styles.badge} />}
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.headerIconButton} 
+                onPress={() => navigation.navigate('Conversations')}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="message-outline" size={20} color="white" />
+                {msgUnreadCount > 0 && <View style={styles.badge} />}
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.headerIconButton} 
+                onPress={() => navigation.navigate('Announcements')}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="bullhorn-outline" size={20} color="white" />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.profileButton}
+                onPress={() => navigation.navigate('Settings')}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="account-circle" size={22} color="white" />
+              </TouchableOpacity>
             </View>
-          )}
+          </View>
         </View>
-      </ScrollView>
-    </SafeAreaView>
+
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="white"
+              colors={['#667eea']}
+            />
+          }
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Stats Cards */}
+          <View style={styles.statsContainer}>
+            <View style={styles.statCard}>
+              <LinearGradient
+                colors={['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.85)']}
+                style={styles.statCardGradient}
+              >
+                <View style={styles.statContent}>
+                  <View style={styles.statIconContainer}>
+                    <MaterialCommunityIcons name="truck-fast" size={28} color="#007AFF" />
+                  </View>
+                  <View style={styles.statTextContainer}>
+                    <Text style={styles.statLabel}>In Transit</Text>
+                    {loadingInTransit ? (
+                      <ActivityIndicator size="small" color="#007AFF" />
+                    ) : (
+                      <Text style={styles.statNumber}>{inTransitCount ?? '-'}</Text>
+                    )}
+                    <Text style={styles.statSub}>Shipments</Text>
+                  </View>
+                </View>
+              </LinearGradient>
+            </View>
+
+            <View style={styles.statCard}>
+              <LinearGradient
+                colors={['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.85)']}
+                style={styles.statCardGradient}
+              >
+                <View style={styles.statContent}>
+                  <View style={styles.statIconContainer}>
+                    <MaterialCommunityIcons name="clock-check" size={28} color="#34C759" />
+                  </View>
+                  <View style={styles.statTextContainer}>
+                    <Text style={styles.statLabel}>On-Time</Text>
+                    {loadingOnTimeLate ? (
+                      <ActivityIndicator size="small" color="#34C759" />
+                    ) : (
+                      <Text style={styles.statNumber}>
+                        {onTimeLate ? Math.round((onTimeLate.onTime / (onTimeLate.onTime + onTimeLate.late)) * 100) + '%' : '-'}
+                      </Text>
+                    )}
+                    <Text style={styles.statSub}>Rate</Text>
+                  </View>
+                </View>
+              </LinearGradient>
+            </View>
+          </View>
+
+          {/* Fleet Map */}
+          <View style={styles.mapContainer}>
+            <Text style={styles.sectionTitle}>Fleet Locations</Text>
+            <View style={styles.mapCard}>
+              <LinearGradient
+                colors={['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.85)']}
+                style={styles.mapCardGradient}
+              >
+                {loadingFleet ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#667eea" />
+                    <Text style={styles.loadingText}>Loading fleet locations...</Text>
+                  </View>
+                ) : (
+                  <MapView
+                    style={styles.map}
+                    region={mapRegion}
+                    showsUserLocation={false}
+                    showsMyLocationButton={false}
+                    showsTraffic={false}
+                  >
+                    {fleetLocations.map((location, index) => (
+                      <Marker
+                        key={index}
+                        coordinate={{
+                          latitude: location.latitude,
+                          longitude: location.longitude,
+                        }}
+                        title={`Vehicle ${location.transporterId}`}
+                        description={`Last updated: ${new Date(location.updatedAt).toLocaleTimeString()}`}
+                      >
+                        <View style={styles.markerContainer}>
+                          <MaterialCommunityIcons name="truck" size={20} color="white" />
+                        </View>
+                      </Marker>
+                    ))}
+                  </MapView>
+                )}
+              </LinearGradient>
+            </View>
+          </View>
+
+          {/* Management Actions */}
+          <View style={styles.actionsContainer}>
+            <Text style={styles.sectionTitle}>Management</Text>
+            <View style={styles.actionsCard}>
+              <LinearGradient
+                colors={['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.85)']}
+                style={styles.actionsCardGradient}
+              >
+                <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('Shipments')} activeOpacity={0.7}>
+                  <View style={styles.actionIconContainer}>
+                    <MaterialCommunityIcons name="package-variant" size={24} color="#007AFF" />
+                  </View>
+                  <Text style={styles.actionText}>View Shipments</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('User Management')} activeOpacity={0.7}>
+                  <View style={styles.actionIconContainer}>
+                    <MaterialCommunityIcons name="account-group" size={24} color="#34C759" />
+                  </View>
+                  <Text style={styles.actionText}>Manage Users</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                </TouchableOpacity>
+
+                {settings.useThirdPartyCarriers && (
+                  <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('Carrier Management')} activeOpacity={0.7}>
+                    <View style={styles.actionIconContainer}>
+                      <MaterialCommunityIcons name="truck" size={24} color="#FF9500" />
+                    </View>
+                    <Text style={styles.actionText}>Manage Carriers</Text>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                  </TouchableOpacity>
+                )}
+
+                {settings.ownTransporters && (
+                  <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('Transport Management')} activeOpacity={0.7}>
+                    <View style={styles.actionIconContainer}>
+                      <MaterialCommunityIcons name="truck-delivery" size={24} color="#8E2DE2" />
+                    </View>
+                    <Text style={styles.actionText}>Transport Management</Text>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('Analytics')} activeOpacity={0.7}>
+                  <View style={styles.actionIconContainer}>
+                    <MaterialCommunityIcons name="chart-line" size={24} color="#FF3B30" />
+                  </View>
+                  <Text style={styles.actionText}>Analytics</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.actionItem, styles.lastActionItem]} onPress={() => navigation.navigate('Company Settings')} activeOpacity={0.7}>
+                  <View style={styles.actionIconContainer}>
+                    <MaterialCommunityIcons name="office-building-cog" size={24} color="#5856D6" />
+                  </View>
+                  <Text style={styles.actionText}>Company Settings</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                </TouchableOpacity>
+              </LinearGradient>
+            </View>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { 
-    flex: 1, 
-    backgroundColor: '#f5f5f5' 
-  },
-  header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    backgroundColor: '#004080', 
-    padding: 16, 
-    borderBottomEndRadius: 16, 
-    borderBottomStartRadius: 16 
-  },
-  headerTitle: { 
-    color: '#fff', 
-    fontSize: 20, 
-    fontWeight: 'bold' 
-  },
-  statsRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    marginHorizontal: 16, 
-    marginTop: 16,
-    marginBottom: 16
-  },
-  statCard: { 
-    flex: 1, 
-    backgroundColor: '#fff', 
-    marginHorizontal: 4, 
-    borderRadius: 8, 
-    padding: 16, 
-    alignItems: 'center' 
-  },
-  statLabel: { 
-    fontSize: 16, 
-    color: '#666' 
-  },
-  statNumber: { 
-    fontSize: 36, 
-    fontWeight: 'bold', 
-    marginVertical: 8 
-  },
-  statSub: { 
-    fontSize: 14, 
-    color: '#999' 
-  },
-  sectionList: { 
-    marginHorizontal: 16 
-  },
-  listItem: { 
-    flexDirection: 'row', 
-    
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    paddingVertical: 12, 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#eee', 
-    backgroundColor: '#fff', 
-    paddingHorizontal: 16 
-  },
-  listText: { 
-    fontSize: 16, 
-    marginLeft: 8 
-  },
-  center: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  analyticsRow: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    padding: 16, 
-    borderTopWidth: 1, 
-    borderTopColor: '#eee', 
-    backgroundColor: '#fff', 
-    borderRadius: 8, 
-    width: '100%' 
-  },
-  analyticsText: { 
-    fontSize: 16, 
-    marginLeft: 8 
-  },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    marginTop: 16,
-    marginHorizontal: 16,
-    padding: 16,
-    elevation: 2,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  map: {
-    width: '100%',
-    height: 180,
-    borderRadius: 8,
-  },
-  mapPlaceholder: {
-    width: '100%',
-    height: 180,
-    borderRadius: 8,
-    backgroundColor: '#f0f0f0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  table: {
-    width: '100%',
-    marginTop: 8,
-    borderRadius: 8,
-    overflow: 'hidden',
-    // backgroundColor: '#f9f9f9',
-  },
-  tableRowHeader: {
-    flexDirection: 'row',
-    backgroundColor: '#f0f0f0',
-    paddingVertical: 6,
-  },
-  tableRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingVertical: 6,
-    borderLeftWidth: 1,
-    borderLeftColor: '#eee',
-    borderRightWidth: 1,
-    borderRightColor: '#eee'
-  },
-  tableCell: {
+  container: {
     flex: 1,
-    textAlign: 'center',
-    fontSize: 13,
-    minHeight: 80,
-    backgroundColor: 'fff',
   },
-  tableHeader: {
-    fontWeight: 'bold',
+  safeArea: {
+    flex: 1,
+  },
+  
+  // Header Styles
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 24,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: 'white',
+    marginBottom: 2,
+  },
+  headerSubtitle: {
     fontSize: 14,
-    flex: 1,
-    textAlign: 'center'
+    color: 'rgba(255, 255, 255, 0.8)',
   },
-  inTransit: {
-    color: 'green',
-    fontWeight: 'bold',
-  },
-  tablePlaceholder: {
-    width: '100%',
-    padding: 24,
+  headerIcons: {
+    flexDirection: 'row',
     alignItems: 'center',
+  },
+  headerIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+    position: 'relative',
+  },
+  profileButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
   },
   badge: {
     position: 'absolute',
-    top: -2,
-    right: -2,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: 'red',
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF3B30',
+  },
+
+  // ScrollView Styles
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 24,
+    paddingBottom: 80,
+  },
+
+  // Stats Container
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  statCard: {
+    flex: 1,
+    marginHorizontal: 6,
+    borderRadius: 20,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+  },
+  statCardGradient: {
+    borderRadius: 20,
+    padding: 20,
+  },
+  statContent: {
+    alignItems: 'center',
+  },
+  statIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  statTextContainer: {
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 14,
+    color: '#8E8E93',
+    marginBottom: 4,
+  },
+  statNumber: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    marginBottom: 2,
+  },
+  statSub: {
+    fontSize: 12,
+    color: '#8E8E93',
+  },
+
+  // Section Title
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: 'white',
+    marginBottom: 16,
+  },
+
+  // Map Container
+  mapContainer: {
+    marginBottom: 24,
+  },
+  mapCard: {
+    borderRadius: 20,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+  },
+  mapCardGradient: {
+    borderRadius: 20,
+    padding: 20,
+  },
+  map: {
+    width: '100%',
+    height: 200,
+    borderRadius: 16,
+  },
+  loadingContainer: {
+    paddingVertical: 60,
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#8E8E93',
+    marginTop: 12,
+  },
+  markerContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+  },
+
+  // Actions Container
+  actionsContainer: {
+    marginBottom: 24,
+  },
+  actionsCard: {
+    borderRadius: 20,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+  },
+  actionsCardGradient: {
+    borderRadius: 20,
+    padding: 20,
+  },
+  actionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(142, 142, 147, 0.2)',
+  },
+  lastActionItem: {
+    borderBottomWidth: 0,
+  },
+  actionIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  actionText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1C1C1E',
   },
 }); 
 export default AdminDashboardScreen;

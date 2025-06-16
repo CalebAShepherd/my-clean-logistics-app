@@ -1,10 +1,12 @@
 import React, { useRef, useEffect, useState, useContext } from 'react';
-import { View, StyleSheet, PanResponder, Button, Alert, SafeAreaView, TouchableOpacity, Text, Dimensions, Modal, TextInput, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, StyleSheet, PanResponder, Button, Alert, SafeAreaView, TouchableOpacity, Text, Dimensions, Modal, TextInput, ScrollView, KeyboardAvoidingView, Platform, Animated, ActivityIndicator } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { GLView } from 'expo-gl';
 import * as THREE from 'three';
 import { Renderer } from 'expo-three';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
 import { createLocation, updateLocation } from '../api/locations';
 import { fetchWarehouses } from '../api/warehouses';
@@ -20,18 +22,48 @@ export default function Warehouse3DView({ route }) {
   // Temporary warehouse selector state
   const [warehouses, setWarehouses] = useState([]);
   const [warehouseId, setWarehouseId] = useState(route?.params?.warehouseId ?? null);
+  const [loadingWarehouses, setLoadingWarehouses] = useState(true);
+  const [warehouseError, setWarehouseError] = useState(null);
+  const [showWarehousePicker, setShowWarehousePicker] = useState(false);
   // Ref to hold the latest warehouseId for callbacks
   const warehouseIdRef = useRef(warehouseId);
   useEffect(() => { warehouseIdRef.current = warehouseId; }, [warehouseId]);
-  useEffect(() => {
-    (async () => {
-      try {
-        const list = await fetchWarehouses(userToken);
-        setWarehouses(list);
-      } catch (err) {
-        Alert.alert('Error', 'Failed to fetch warehouses');
+  const loadWarehouses = async () => {
+    if (!userToken) {
+      console.log('No userToken available');
+      setLoadingWarehouses(false);
+      setWarehouseError('No authentication token available');
+      return;
+    }
+    
+    setLoadingWarehouses(true);
+    setWarehouseError(null);
+    try {
+      console.log('Fetching warehouses with token:', userToken ? 'present' : 'missing');
+      const list = await fetchWarehouses(userToken);
+      console.log('Fetched warehouses:', list);
+      console.log('Warehouse data structure:', JSON.stringify(list, null, 2));
+      setWarehouses(list || []);
+      
+      if (!list || list.length === 0) {
+        console.log('No warehouses found');
+      } else {
+        console.log('Warehouses for picker:');
+        list.forEach((w, index) => {
+          console.log(`  ${index}: id=${w.id}, name=${w.name}`);
+        });
       }
-    })();
+    } catch (err) {
+      console.error('Error fetching warehouses:', err);
+      setWarehouseError(err.message);
+      setWarehouses([]);
+    } finally {
+      setLoadingWarehouses(false);
+    }
+  };
+
+  useEffect(() => {
+    loadWarehouses();
   }, [userToken]);
   const animationRef = useRef();
   const cameraRef = useRef();
@@ -78,6 +110,7 @@ export default function Warehouse3DView({ route }) {
   const [ready, setReady] = useState(true);
 
   const [showProperties, setShowProperties] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
   // Local state for size fields to allow empty input
   const [sizeX, setSizeX] = useState('');
   const [sizeY, setSizeY] = useState('');
@@ -103,6 +136,53 @@ export default function Warehouse3DView({ route }) {
     ));
   };
 
+  // Control Functions
+  const resetCameraView = () => {
+    cameraStateRef.current = { 
+      radius: 8, 
+      theta: Math.PI / 4, 
+      phi: Math.PI / 4 
+    };
+    setCameraTarget({ x: 0, y: 0, z: 0 });
+    Alert.alert('Camera Reset', 'View has been reset to default position', [{ text: 'OK' }]);
+  };
+
+  const fitToScreen = () => {
+    if (objectsRef.current.length === 0) {
+      Alert.alert('No Objects', 'No warehouse objects to fit in view', [{ text: 'OK' }]);
+      return;
+    }
+    
+    // Calculate bounding box of all objects
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    let minZ = Infinity, maxZ = -Infinity;
+    
+    objectsRef.current.forEach(obj => {
+      const { position, size } = obj;
+      minX = Math.min(minX, position.x - size.x/2);
+      maxX = Math.max(maxX, position.x + size.x/2);
+      minY = Math.min(minY, position.y - size.y/2);
+      maxY = Math.max(maxY, position.y + size.y/2);
+      minZ = Math.min(minZ, position.z - size.z/2);
+      maxZ = Math.max(maxZ, position.z + size.z/2);
+    });
+    
+    // Calculate center and size
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const centerZ = (minZ + maxZ) / 2;
+    const sizeX = maxX - minX;
+    const sizeZ = maxZ - minZ;
+    const maxSize = Math.max(sizeX, sizeZ);
+    
+    // Set camera to fit the scene
+    setCameraTarget({ x: centerX, y: centerY, z: centerZ });
+    cameraStateRef.current.radius = maxSize * 1.5;
+    
+    Alert.alert('View Adjusted', 'Camera positioned to fit all warehouse objects', [{ text: 'OK' }]);
+  };
+
   // Save layout to AsyncStorage
   const saveLayout = async () => {
     try {
@@ -122,10 +202,20 @@ export default function Warehouse3DView({ route }) {
       // Persist bins as locations in backend
       for (const obj of objectsRef.current) {
         if (obj.type !== 'bin') continue;
-        // Hierarchy
-        const shelf = objectsRef.current.find(o => o.type === 'shelf' &&
-          Math.abs(o.position.x - obj.position.x) <= o.size.x/2 &&
-          Math.abs(o.position.z - obj.position.z) <= o.size.z/2);
+        // Identify the topmost shelf directly under the bin using bounding overlap and vertical proximity
+        const binBottomY = obj.position.y - obj.size.y / 2;
+        const shelfCandidates = objectsRef.current.filter(o => o.type === 'shelf' &&
+          Math.abs(o.position.x - obj.position.x) <= (o.size.x / 2 + obj.size.x / 2) &&
+          Math.abs(o.position.z - obj.position.z) <= (o.size.z / 2 + obj.size.z / 2) &&
+          (o.position.y + o.size.y / 2) <= binBottomY + 0.001
+        );
+        const shelf = shelfCandidates.length > 0
+          ? shelfCandidates.reduce((prev, curr) => {
+              const prevTop = prev.position.y + prev.size.y / 2;
+              const currTop = curr.position.y + curr.size.y / 2;
+              return currTop > prevTop ? curr : prev;
+            }, shelfCandidates[0])
+          : undefined;
         const aisle = objectsRef.current.find(o => o.type === 'aisle' &&
           Math.abs(o.position.x - obj.position.x) <= o.size.x/2 &&
           Math.abs(o.position.z - obj.position.z) <= o.size.z/2);
@@ -311,10 +401,11 @@ export default function Warehouse3DView({ route }) {
                 };
               } else if (placementTypeRef.current === 'shelf') {
                 const sizeY = 0.5;
-                // Align odd-width shelf to grid square centers
-                const offset = 0.5;
-                snappedX = Math.round(rawX - offset) + offset;
-                snappedZ = Math.round(rawZ - offset) + offset;
+                // Align odd-width shelf to grid square centers using its half dimension
+                const halfX = 1 / 2;
+                const halfZ = 1 / 2;
+                snappedX = Math.round(rawX - halfX) + halfX;
+                snappedZ = Math.round(rawZ - halfZ) + halfZ;
                 let yPos = sizeY / 2;
                 if (stackObj) {
                   yPos = stackObj.position.y + (stackObj.size.y / 2) + (sizeY / 2);
@@ -329,10 +420,11 @@ export default function Warehouse3DView({ route }) {
                 };
               } else if (placementTypeRef.current === 'bin') {
                 const sizeY = 1;
-                // Align odd-width bin to grid square centers
-                const offset = 0.5;
-                snappedX = Math.round(rawX - offset) + offset;
-                snappedZ = Math.round(rawZ - offset) + offset;
+                // Align odd-width bin to grid square centers using its half dimension
+                const halfX = 1 / 2;
+                const halfZ = 1 / 2;
+                snappedX = Math.round(rawX - halfX) + halfX;
+                snappedZ = Math.round(rawZ - halfZ) + halfZ;
                 let yPos = sizeY / 2;
                 if (stackObj) {
                   yPos = stackObj.position.y + (stackObj.size.y / 2) + (sizeY / 2);
@@ -448,39 +540,33 @@ export default function Warehouse3DView({ route }) {
               const intersection = new THREE.Vector3();
               raycaster.ray.intersectPlane(plane, intersection);
               if (intersection) {
-                // Snap to grid, with odd-sized center adjustment
+                // Snap to grid using each object's half-dimension, so odd/even align correctly
                 const rawX = intersection.x + dragOffsetRef.current.x;
                 const rawZ = intersection.z + dragOffsetRef.current.z;
-                let snappedX = snapToGrid(rawX);
-                let snappedZ = snapToGrid(rawZ);
-                // If dragging a shelf or bin (odd size), center on grid square
                 const draggedObj = objectsRef.current.find(o => o.id === selectedIdRef.current);
-                if (draggedObj && (draggedObj.type === 'shelf' || draggedObj.type === 'bin')) {
-                  const halfX = draggedObj.size.x / 2;
-                  const halfZ = draggedObj.size.z / 2;
-                  snappedX = Math.round(rawX - halfX) + halfX;
-                  snappedZ = Math.round(rawZ - halfZ) + halfZ;
-                }
-                // Find the highest component at this x/z (excluding the dragged one)
-                const tolerance = 0.01;
+                const halfX = draggedObj ? draggedObj.size.x / 2 : 0;
+                const halfZ = draggedObj ? draggedObj.size.z / 2 : 0;
+                const snappedX = Math.round(rawX - halfX) + halfX;
+                const snappedZ = Math.round(rawZ - halfZ) + halfZ;
+                // Determine stacking: find highest underlying object overlapping in XZ
                 let maxY = null;
                 objectsRef.current.forEach(obj => {
-                  if (obj.id !== selectedIdRef.current &&
-                      Math.abs(obj.position.x - snappedX) < tolerance &&
-                      Math.abs(obj.position.z - snappedZ) < tolerance) {
-                    const topY = obj.position.y + obj.size.y / 2;
-                    if (maxY === null || topY > maxY) {
-                      maxY = topY;
+                  if (obj.id !== selectedIdRef.current) {
+                    const overlapX = Math.abs(obj.position.x - snappedX) < (obj.size.x / 2 + (draggedObj?.size.x || 0) / 2);
+                    const overlapZ = Math.abs(obj.position.z - snappedZ) < (obj.size.z / 2 + (draggedObj?.size.z || 0) / 2);
+                    if (overlapX && overlapZ) {
+                      const topY = obj.position.y + obj.size.y / 2;
+                      if (maxY === null || topY > maxY) {
+                        maxY = topY;
+                      }
                     }
                   }
                 });
-                let newY;
-                if (maxY !== null) {
-                  newY = maxY + (draggedObj ? draggedObj.size.y / 2 : 0.5);
-                } else {
-                  newY = draggedObj ? draggedObj.size.y / 2 : 0.5; // ground
-                }
-                setObjects((prev) => prev.map(obj =>
+                // Calculate new Y position: on top of highest object or ground
+                const newY = maxY !== null
+                  ? maxY + (draggedObj?.size.y || 1) / 2
+                  : (draggedObj?.size.y || 1) / 2;
+                setObjects(prev => prev.map(obj =>
                   obj.id === selectedIdRef.current
                     ? { ...obj, position: { x: snappedX, y: newY, z: snappedZ } }
                     : obj
@@ -705,38 +791,203 @@ export default function Warehouse3DView({ route }) {
 
   return (
     <View style={styles.container}>
-      {/* Warehouse selection overlay */}
+      {/* Enhanced Warehouse Selection Overlay */}
       {!warehouseId && (
-        <View style={styles.selectorOverlay}>
-          <Text style={styles.selectorText}>Select a Warehouse</Text>
-          <Picker
-            selectedValue={warehouseId}
-            onValueChange={setWarehouseId}
-            style={styles.selectorPicker}
-          >
-            <Picker.Item label="-- Select Warehouse --" value={null} />
-            {warehouses.map(w => (
-              <Picker.Item key={w.id} label={w.name} value={w.id} />
-            ))}
-          </Picker>
-        </View>
+        <LinearGradient
+          colors={['rgba(0,0,0,0.95)', 'rgba(26,26,26,0.95)']}
+          style={styles.selectorOverlay}
+        >
+          <View style={styles.selectorContent}>
+            <MaterialCommunityIcons name="warehouse" size={64} color="#007AFF" />
+            <Text style={styles.selectorTitle}>Select Warehouse</Text>
+            <Text style={styles.selectorSubtitle}>Choose a warehouse to start editing</Text>
+            
+            {loadingWarehouses ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#007AFF" />
+                <Text style={styles.loadingText}>Loading warehouses...</Text>
+              </View>
+            ) : warehouseError ? (
+              <View style={styles.noWarehousesContainer}>
+                <MaterialCommunityIcons name="alert-circle" size={48} color="#FF453A" />
+                <Text style={styles.noWarehousesTitle}>Error Loading Warehouses</Text>
+                <Text style={styles.noWarehousesSubtitle}>
+                  {warehouseError}
+                </Text>
+                <TouchableOpacity 
+                  style={styles.retryButton}
+                  onPress={loadWarehouses}
+                  activeOpacity={0.8}
+                >
+                  <MaterialCommunityIcons name="refresh" size={20} color="white" />
+                  <Text style={styles.createWarehouseButtonText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : warehouses.length === 0 ? (
+              <View style={styles.noWarehousesContainer}>
+                <MaterialCommunityIcons name="warehouse-off" size={48} color="#8E8E93" />
+                <Text style={styles.noWarehousesTitle}>No Warehouses Found</Text>
+                <Text style={styles.noWarehousesSubtitle}>
+                  You need to create a warehouse first before using the 3D editor.
+                </Text>
+                <TouchableOpacity 
+                  style={styles.createWarehouseButton}
+                  onPress={() => Alert.alert(
+                    'Create Warehouse', 
+                    'Please go to the main warehouse management screen to create a new warehouse.',
+                    [{ text: 'OK' }]
+                  )}
+                  activeOpacity={0.8}
+                >
+                  <MaterialCommunityIcons name="plus" size={20} color="white" />
+                  <Text style={styles.createWarehouseButtonText}>Create Warehouse</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.selectorPickerContainer}>
+                <TouchableOpacity 
+                  style={styles.customPickerButton}
+                  onPress={() => setShowWarehousePicker(true)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.customPickerText}>
+                    {warehouseId 
+                      ? warehouses.find(w => w.id === warehouseId)?.name || 'Select Warehouse'
+                      : 'Select Warehouse'
+                    }
+                  </Text>
+                  <MaterialCommunityIcons name="chevron-down" size={24} color="#007AFF" />
+                </TouchableOpacity>
+                <Text style={styles.warehouseCount}>
+                  {warehouses.length} warehouse{warehouses.length !== 1 ? 's' : ''} available
+                </Text>
+
+                {/* Custom Warehouse Picker Modal */}
+                <Modal
+                  visible={showWarehousePicker}
+                  animationType="slide"
+                  transparent={true}
+                  onRequestClose={() => setShowWarehousePicker(false)}
+                >
+                  <View style={styles.pickerModalOverlay}>
+                    <View style={styles.pickerModalContent}>
+                      <View style={styles.pickerModalHeader}>
+                        <Text style={styles.pickerModalTitle}>Select Warehouse</Text>
+                        <TouchableOpacity 
+                          onPress={() => setShowWarehousePicker(false)}
+                          style={styles.pickerModalClose}
+                        >
+                          <MaterialCommunityIcons name="close" size={24} color="#8E8E93" />
+                        </TouchableOpacity>
+                      </View>
+                      <ScrollView style={styles.pickerModalBody}>
+                        {warehouses.map((warehouse) => (
+                          <TouchableOpacity
+                            key={warehouse.id}
+                            style={[
+                              styles.warehouseOption,
+                              warehouseId === warehouse.id && styles.warehouseOptionSelected
+                            ]}
+                            onPress={() => {
+                              console.log('Selected warehouse:', warehouse.name, warehouse.id);
+                              setWarehouseId(warehouse.id);
+                              setShowWarehousePicker(false);
+                            }}
+                            activeOpacity={0.8}
+                          >
+                            <View style={styles.warehouseOptionContent}>
+                              <MaterialCommunityIcons 
+                                name="warehouse" 
+                                size={24} 
+                                color={warehouseId === warehouse.id ? "#007AFF" : "#8E8E93"} 
+                              />
+                              <View style={styles.warehouseOptionText}>
+                                <Text style={[
+                                  styles.warehouseOptionName,
+                                  warehouseId === warehouse.id && styles.warehouseOptionNameSelected
+                                ]}>
+                                  {warehouse.name}
+                                </Text>
+                                <Text style={styles.warehouseOptionId}>ID: {warehouse.id}</Text>
+                              </View>
+                            </View>
+                            {warehouseId === warehouse.id && (
+                              <MaterialCommunityIcons name="check-circle" size={20} color="#007AFF" />
+                            )}
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  </View>
+                </Modal>
+              </View>
+            )}
+          </View>
+        </LinearGradient>
       )}
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.buttonRow}>
-          <Button title="Save Layout" onPress={saveLayout} />
-          <Button title="Load Layout" onPress={loadLayout} />
-          {selectedId && (
-            <Button
-              title="Delete Component"
-              color="#d32f2f"
-              onPress={() => {
-                setObjects(prev => prev.filter(obj => obj.id !== selectedId));
-                setSelectedId(null);
-              }}
-            />
-          )}
-        </View>
-      </SafeAreaView>
+
+      {/* Header */}
+      <LinearGradient
+        colors={['rgba(0,0,0,0.8)', 'transparent']}
+        style={styles.header}
+      >
+        <SafeAreaView style={styles.headerContent}>
+          <View style={styles.headerLeft}>
+            <MaterialCommunityIcons name="cube-outline" size={24} color="white" />
+            <Text style={styles.headerTitle}>3D Editor</Text>
+          </View>
+          <View style={styles.headerRight}>
+            {selectedId && (
+              <View style={styles.selectionIndicator}>
+                <MaterialCommunityIcons name="cursor-default-click" size={12} color="#34C759" />
+                <Text style={styles.selectionText}>
+                  {objects.find(o => o.id === selectedId)?.label || 'Selected'}
+                </Text>
+              </View>
+            )}
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+
+      {/* Action Bar */}
+      <View style={styles.actionBar}>
+        <TouchableOpacity style={styles.actionButton} onPress={saveLayout} activeOpacity={0.8}>
+          <MaterialCommunityIcons name="content-save" size={18} color="#007AFF" />
+          <Text style={styles.actionButtonText}>Save</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.actionButton} onPress={loadLayout} activeOpacity={0.8}>
+          <MaterialCommunityIcons name="folder-open" size={18} color="#007AFF" />
+          <Text style={styles.actionButtonText}>Load</Text>
+        </TouchableOpacity>
+        
+        {selectedId && (
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.deleteButton]} 
+            onPress={() => {
+              Alert.alert(
+                'Delete Component',
+                `Are you sure you want to delete "${objects.find(o => o.id === selectedId)?.label || 'this component'}"?`,
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { 
+                    text: 'Delete', 
+                    style: 'destructive',
+                    onPress: () => {
+                      setObjects(prev => prev.filter(obj => obj.id !== selectedId));
+                      setSelectedId(null);
+                    }
+                  }
+                ]
+              );
+            }}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons name="delete" size={18} color="#FF453A" />
+            <Text style={[styles.actionButtonText, { color: '#FF453A' }]}>Delete</Text>
+          </TouchableOpacity>
+        )}
+      </View>
       <GLView
         style={styles.glview}
         onContextCreate={onContextCreate}
@@ -746,45 +997,85 @@ export default function Warehouse3DView({ route }) {
         }}
         {...panResponder.panHandlers}
       />
-      {/* Component Palette */}
+
+      {/* Floating Controls */}
+      <View style={styles.floatingControls}>
+        <TouchableOpacity 
+          style={styles.controlButton} 
+          activeOpacity={0.8}
+          onPress={resetCameraView}
+        >
+          <MaterialCommunityIcons name="rotate-3d-variant" size={20} color="#007AFF" />
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.controlButton} 
+          activeOpacity={0.8}
+          onPress={fitToScreen}
+        >
+          <MaterialCommunityIcons name="fit-to-screen" size={20} color="#007AFF" />
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.controlButton} 
+          activeOpacity={0.8}
+          onPress={() => setShowInfoModal(true)}
+        >
+          <MaterialCommunityIcons name="information-outline" size={20} color="#007AFF" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Properties Button */}
       {selectedId && !showProperties && (
-        <View style={styles.propertiesButtonRow}>
-          <Button
-            title="Properties"
-            onPress={() => setShowProperties(true)}
-            color="#007aff"
-          />
-        </View>
+        <TouchableOpacity 
+          style={styles.propertiesButton}
+          onPress={() => setShowProperties(true)}
+          activeOpacity={0.8}
+        >
+          <MaterialCommunityIcons name="cog" size={20} color="#007AFF" />
+          <Text style={styles.propertiesButtonText}>Properties</Text>
+        </TouchableOpacity>
       )}
-      <SafeAreaView style={styles.paletteSafeArea}>
+
+      {/* Enhanced Component Palette */}
+      <LinearGradient
+        colors={['rgba(255,255,255,0.95)', 'rgba(248,249,250,0.95)']}
+        style={styles.paletteContainer}
+      >
+        <View style={styles.paletteHeader}>
+          <MaterialCommunityIcons name="palette" size={20} color="#1C1C1E" />
+          <Text style={styles.paletteTitle}>Add Components</Text>
+        </View>
         <View style={styles.paletteRow}>
           <PaletteButton
             label="Zone"
-            color="#FFFF00"
+            color="#FFD60A"
+            icon="map-marker"
             selected={placementType === 'zone'}
             onPress={() => setPlacementType(placementType === 'zone' ? null : 'zone')}
           />
           <PaletteButton
             label="Aisle"
-            color="#000000"
+            color="#8E8E93"
+            icon="road"
             selected={placementType === 'aisle'}
             onPress={() => setPlacementType(placementType === 'aisle' ? null : 'aisle')}
           />
           <PaletteButton
             label="Shelf"
-            color="#007aff"
+            color="#007AFF"
+            icon="bookshelf"
             selected={placementType === 'shelf'}
             onPress={() => setPlacementType(placementType === 'shelf' ? null : 'shelf')}
           />
           <PaletteButton
             label="Bin"
-            color="#8bc34a"
+            color="#34C759"
+            icon="package-variant"
             selected={placementType === 'bin'}
             onPress={() => setPlacementType(placementType === 'bin' ? null : 'bin')}
           />
         </View>
-      </SafeAreaView>
-      {/* Properties Panel Modal */}
+      </LinearGradient>
+      {/* Enhanced Properties Panel Modal */}
       <Modal
         visible={showProperties}
         animationType="slide"
@@ -797,23 +1088,57 @@ export default function Warehouse3DView({ route }) {
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
           >
-            <ScrollView style={{ paddingBottom: 30 }}>
-              <Text style={styles.modalTitle}>Component Properties</Text>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderLeft}>
+                <MaterialCommunityIcons name="cog" size={24} color="#007AFF" />
+                <Text style={styles.modalTitle}>Properties</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.modalCloseButton}
+                onPress={() => setShowProperties(false)}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="close" size={20} color="#8E8E93" />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
               {(() => {
                 const obj = objects.find(o => o.id === selectedId);
-                if (!obj) return null;
-                return (
-                  <>
-                    <Text style={styles.modalLabel}>ID</Text>
-                    <Text style={styles.modalValue}>{obj.id}</Text>
-                    <Text style={styles.modalLabel}>Type</Text>
-                    <Text style={styles.modalValue}>{obj.type}</Text>
-                    <Text style={styles.modalLabel}>Label</Text>
-                    <TextInput
-                      style={styles.modalInput}
-                      value={obj.label}
-                      onChangeText={text => updateSelectedObject({ label: text })}
-                    />
+                                  if (!obj) return null;
+                  return (
+                    <View style={styles.propertyContainer}>
+                      <View style={styles.propertyItem}>
+                        <Text style={styles.modalLabel}>Component ID</Text>
+                        <Text style={styles.modalValue}>{obj.id}</Text>
+                      </View>
+                      
+                      <View style={styles.propertyItem}>
+                        <Text style={styles.modalLabel}>Type</Text>
+                        <View style={styles.propertyValueContainer}>
+                          <MaterialCommunityIcons 
+                            name={
+                              obj.type === 'zone' ? 'map-marker' :
+                              obj.type === 'aisle' ? 'road' :
+                              obj.type === 'shelf' ? 'bookshelf' :
+                              obj.type === 'bin' ? 'package-variant' : 'cube-outline'
+                            } 
+                            size={16} 
+                            color="#007AFF" 
+                          />
+                          <Text style={styles.modalValue}>{obj.type}</Text>
+                        </View>
+                      </View>
+                      
+                      <View style={styles.propertyItem}>
+                        <Text style={styles.modalLabel}>Label</Text>
+                        <TextInput
+                          style={styles.modalInput}
+                          value={obj.label}
+                          onChangeText={text => updateSelectedObject({ label: text })}
+                          placeholder="Enter component label"
+                        />
+                      </View>
                     <Text style={styles.modalLabel}>Size (x, y, z)</Text>
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                       <TextInput
@@ -857,129 +1182,684 @@ export default function Warehouse3DView({ route }) {
                         updateSelectedObject({ color: colorNum });
                       }}
                     />
-                  </>
-                );
-              })()}
-              <Button title="Close" onPress={() => setShowProperties(false)} />
+                    </View>
+                  );
+                })()}
             </ScrollView>
+            
+            <View style={styles.modalFooter}>
+              <TouchableOpacity 
+                style={styles.modalButton}
+                onPress={() => setShowProperties(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalButtonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
           </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* Information Modal */}
+      <Modal
+        visible={showInfoModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowInfoModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.infoModalContent}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderLeft}>
+                <MaterialCommunityIcons name="help-circle-outline" size={24} color="#007AFF" />
+                <Text style={styles.modalTitle}>3D Editor Guide</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.modalCloseButton}
+                onPress={() => setShowInfoModal(false)}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="close" size={20} color="#8E8E93" />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.infoModalBody} showsVerticalScrollIndicator={false}>
+              <View style={styles.infoSection}>
+                <Text style={styles.infoSectionTitle}>Navigation</Text>
+                <View style={styles.infoItem}>
+                  <MaterialCommunityIcons name="gesture-tap" size={20} color="#007AFF" />
+                  <Text style={styles.infoText}>Tap objects to select them</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <MaterialCommunityIcons name="gesture-swipe" size={20} color="#007AFF" />
+                  <Text style={styles.infoText}>Drag to rotate the view</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <MaterialCommunityIcons name="gesture-pinch" size={20} color="#007AFF" />
+                  <Text style={styles.infoText}>Pinch to zoom in/out</Text>
+                </View>
+              </View>
+              
+              <View style={styles.infoSection}>
+                <Text style={styles.infoSectionTitle}>Building Components</Text>
+                <View style={styles.infoItem}>
+                  <MaterialCommunityIcons name="map-marker" size={20} color="#FFD60A" />
+                  <Text style={styles.infoText}>Zone - Large warehouse areas</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <MaterialCommunityIcons name="road" size={20} color="#8E8E93" />
+                  <Text style={styles.infoText}>Aisle - Pathways between shelves</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <MaterialCommunityIcons name="bookshelf" size={20} color="#007AFF" />
+                  <Text style={styles.infoText}>Shelf - Storage structures</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <MaterialCommunityIcons name="package-variant" size={20} color="#34C759" />
+                  <Text style={styles.infoText}>Bin - Individual storage units</Text>
+                </View>
+              </View>
+              
+              <View style={styles.infoSection}>
+                <Text style={styles.infoSectionTitle}>Editing</Text>
+                <View style={styles.infoItem}>
+                  <MaterialCommunityIcons name="cursor-default-click" size={20} color="#007AFF" />
+                  <Text style={styles.infoText}>Select component to see properties</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <MaterialCommunityIcons name="content-save" size={20} color="#007AFF" />
+                  <Text style={styles.infoText}>Save layouts for persistence</Text>
+                </View>
+              </View>
+            </ScrollView>
+            
+            <View style={styles.modalFooter}>
+              <TouchableOpacity 
+                style={styles.modalButton}
+                onPress={() => setShowInfoModal(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalButtonText}>Got it!</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
     </View>
   );
 }
 
-function PaletteButton({ label, color, selected, onPress }) {
+function PaletteButton({ label, color, icon, selected, onPress }) {
   return (
     <TouchableOpacity
-      style={[styles.paletteButton, selected && { borderColor: color, borderWidth: 2 }]}
+      style={[styles.paletteButton, selected && styles.paletteButtonSelected]}
       onPress={onPress}
-      activeOpacity={0.7}
+      activeOpacity={0.8}
     >
-      <View style={[styles.paletteIcon, { backgroundColor: color }]} />
-      <Text style={[styles.paletteLabel, selected && { color }]}>{label}</Text>
+      <View style={[styles.paletteIconContainer, { backgroundColor: color }, selected && styles.paletteIconSelected]}>
+        <MaterialCommunityIcons 
+          name={icon} 
+          size={18} 
+          color={selected ? 'white' : 'rgba(255,255,255,0.9)'} 
+        />
+      </View>
+      <Text style={[styles.paletteLabel, selected && { color, fontWeight: '600' }]}>{label}</Text>
+      {selected && (
+        <View style={styles.selectedIndicator}>
+          <MaterialCommunityIcons name="check-circle" size={12} color={color} />
+        </View>
+      )}
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#222' },
-  glview: { flex: 1 },
-  safeArea: {
-    backgroundColor: '#222',
-    zIndex: 2,
+  // Main Container
+  container: { 
+    flex: 1, 
+    backgroundColor: '#1a1a1a',
   },
-  buttonRow: {
+  glview: { 
+    flex: 1,
+  },
+
+  // Header
+  header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    paddingBottom: 20,
+  },
+  headerContent: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-    backgroundColor: '#222',
-    zIndex: 2,
+    marginHorizontal: 20,
+    paddingTop: 16,
   },
-  paletteSafeArea: {
-    backgroundColor: '#222',
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: 'white',
+    marginLeft: 12,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  selectionIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  selectionText: {
+    fontSize: 12,
+    color: 'white',
+    marginLeft: 6,
+    fontWeight: '500',
+  },
+
+  // Action Bar
+  actionBar: {
+    position: 'absolute',
+    top: 100,
+    left: 20,
+    right: 20,
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    zIndex: 15,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  actionButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#007AFF',
+    marginLeft: 6,
+  },
+  deleteButton: {
+    marginLeft: 'auto',
+  },
+
+  // Floating Controls
+  floatingControls: {
+    position: 'absolute',
+    bottom: 160,
+    left: 20,
+    flexDirection: 'column',
+    zIndex: 15,
+  },
+  controlButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+  },
+
+  // Properties Button
+  propertiesButton: {
+    position: 'absolute',
+    bottom: 160,
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 24,
+    zIndex: 15,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+  },
+  propertiesButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#007AFF',
+    marginLeft: 8,
+  },
+
+  // Component Palette
+  paletteContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 34,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+  },
+  paletteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  paletteTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginLeft: 8,
   },
   paletteRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingBottom: 18,
-    backgroundColor: '#222',
   },
   paletteButton: {
     alignItems: 'center',
-    marginHorizontal: 12,
-    padding: 6,
-    borderRadius: 8,
-    borderColor: '#444',
-    borderWidth: 1,
-    backgroundColor: '#333',
-    minWidth: 60,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: 'white',
+    minWidth: 70,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    position: 'relative',
   },
-  paletteIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 4,
-    marginBottom: 4,
+  paletteButtonSelected: {
+    borderColor: '#007AFF',
+    backgroundColor: '#F0F8FF',
+    transform: [{ scale: 1.05 }],
+  },
+  paletteIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  paletteIconSelected: {
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
   },
   paletteLabel: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12,
+    color: '#1C1C1E',
+    fontWeight: '500',
+    textAlign: 'center',
   },
+  selectedIndicator: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 2,
+  },
+
+  // Modal Styles
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    minHeight: 300,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 20,
-    minHeight: 320,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  modalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    color: '#222',
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginLeft: 8,
+  },
+  modalCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F2F2F7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBody: {
+    padding: 20,
+  },
+  propertyContainer: {
+    marginBottom: 20,
+  },
+  propertyItem: {
+    marginBottom: 16,
   },
   modalLabel: {
     fontSize: 14,
-    color: '#555',
-    marginTop: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  propertyValueContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   modalValue: {
-    fontSize: 14,
-    color: '#222',
-    marginBottom: 4,
+    fontSize: 16,
+    color: '#1C1C1E',
+    fontWeight: '500',
+    marginLeft: 8,
   },
   modalInput: {
     borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 6,
-    padding: 8,
-    marginTop: 4,
-    marginBottom: 4,
-    fontSize: 14,
-    color: '#222',
-    backgroundColor: '#f7f7f7',
+    borderColor: '#E5E5EA',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#1C1C1E',
+    backgroundColor: '#F2F2F7',
   },
-  propertiesButtonRow: {
+  modalFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5EA',
+  },
+  modalButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 14,
+    borderRadius: 12,
     alignItems: 'center',
-    marginBottom: 4,
-    backgroundColor: '#222',
-    paddingTop: 4,
-    zIndex: 2,
   },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+  },
+
+  // Information Modal Styles
+  infoModalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '85%',
+    minHeight: 500,
+  },
+  infoModalBody: {
+    padding: 20,
+  },
+  infoSection: {
+    marginBottom: 24,
+  },
+  infoSectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 12,
+  },
+  infoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  infoText: {
+    fontSize: 16,
+    color: '#1C1C1E',
+    marginLeft: 12,
+    flex: 1,
+  },
+
+  // Warehouse Selector
   selectorOverlay: {
-    position: 'absolute', top: 0, bottom: 0, left: 0, right: 0,
-    backgroundColor: 'rgba(0,0,0,0.8)', zIndex: 100,
-    justifyContent: 'center', alignItems: 'center', padding: 16,
+    position: 'absolute', 
+    top: 0, 
+    bottom: 0, 
+    left: 0, 
+    right: 0,
+    zIndex: 100,
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    padding: 32,
   },
-  selectorText: { color: '#fff', fontSize: 18, marginBottom: 12 },
-  selectorPicker: { width: '80%', color: '#fff', backgroundColor: '#333', borderRadius: 8 },
+  selectorContent: {
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 20,
+    padding: 32,
+    alignItems: 'center',
+    minWidth: 280,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+  },
+  selectorTitle: { 
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  selectorSubtitle: {
+    fontSize: 16,
+    color: '#8E8E93',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  selectorPickerContainer: {
+    width: '100%',
+    backgroundColor: '#F2F2F7',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  selectorPicker: { 
+    width: '100%', 
+    color: '#1C1C1E',
+  },
+  
+  // Loading and Error States
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#8E8E93',
+    marginTop: 16,
+  },
+  noWarehousesContainer: {
+    alignItems: 'center',
+    paddingVertical: 32,
+  },
+  noWarehousesTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  noWarehousesSubtitle: {
+    fontSize: 16,
+    color: '#8E8E93',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  createWarehouseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+  },
+  createWarehouseButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+    marginLeft: 8,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF453A',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 24,
+  },
+  warehouseCount: {
+    fontSize: 14,
+    color: '#8E8E93',
+    textAlign: 'center',
+    marginTop: 12,
+  },
+
+  // Custom Picker Styles
+  customPickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F2F2F7',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  customPickerText: {
+    fontSize: 16,
+    color: '#1C1C1E',
+    fontWeight: '500',
+  },
+
+  // Picker Modal Styles
+  pickerModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  pickerModalContent: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    width: '100%',
+    maxHeight: '70%',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    overflow: 'hidden',
+  },
+  pickerModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  pickerModalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1C1C1E',
+  },
+  pickerModalClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F2F2F7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pickerModalBody: {
+    maxHeight: 400,
+  },
+  warehouseOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
+  },
+  warehouseOptionSelected: {
+    backgroundColor: '#F0F8FF',
+  },
+  warehouseOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  warehouseOptionText: {
+    marginLeft: 16,
+    flex: 1,
+  },
+  warehouseOptionName: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1C1C1E',
+    marginBottom: 4,
+  },
+  warehouseOptionNameSelected: {
+    color: '#007AFF',
+    fontWeight: '600',
+  },
+  warehouseOptionId: {
+    fontSize: 14,
+    color: '#8E8E93',
+  },
 });

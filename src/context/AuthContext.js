@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Buffer } from 'buffer';
+import socketService from '../services/socketService';
 
 // Simple JWT payload parser
 function parseJwt(token) {
@@ -36,6 +37,9 @@ export function AuthProvider({ children }) {
       setUserToken(token);
       const decoded = parseJwt(token);
       setUser({ id: decoded.userId, role: decoded.role });
+      console.log('AuthContext: connecting WebSocket with token:', token.substring(0, 20) + '...');
+      console.log('AuthContext: decoded token payload:', decoded);
+      socketService.connect(token);
     } catch (e) {
       console.error('Failed to save token', e);
     }
@@ -48,6 +52,7 @@ export function AuthProvider({ children }) {
       await AsyncStorage.removeItem('userToken');
       setUserToken(null);
       setUser(null);
+      socketService.disconnect();
     } catch (e) {
       console.error('Failed to remove token', e);
     }
@@ -63,10 +68,14 @@ export function AuthProvider({ children }) {
           await AsyncStorage.removeItem('userToken');
           setUserToken(null);
           setUser(null);
+          socketService.disconnect();
         } else if (token) {
           setUserToken(token);
           const decoded = parseJwt(token);
           setUser({ id: decoded.userId, role: decoded.role });
+          console.log('AuthContext: loaded token from storage:', token.substring(0, 20) + '...');
+          console.log('AuthContext: decoded stored token payload:', decoded);
+          socketService.connect(token);
         }
       } catch (e) {
         console.error('Failed to load token', e);

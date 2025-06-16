@@ -8,15 +8,15 @@ const warehouseItemController = require('../controllers/warehouseItemController'
 router.get('/', requireAuth, requireRole(['admin','dev','warehouse_admin']), warehouseItemController.getWarehouseItems);
 
 // Get a single warehouse item by composite key
-router.get('/:warehouseId/:itemId', requireAuth, requireRole(['admin','dev','warehouse_admin']), warehouseItemController.getWarehouseItem);
+router.get('/:warehouseId/:itemId/:locationId', requireAuth, requireRole(['admin','dev','warehouse_admin']), warehouseItemController.getWarehouseItem);
 
 // Create a new warehouse item record
 router.post('/', requireAuth, requireRole(['admin','dev','warehouse_admin']), warehouseItemController.createWarehouseItem);
 
 // Update an existing warehouse item
-router.put('/:warehouseId/:itemId', requireAuth, requireRole(['admin','dev','warehouse_admin']), warehouseItemController.updateWarehouseItem);
+router.put('/:warehouseId/:itemId/:locationId', requireAuth, requireRole(['admin','dev','warehouse_admin']), warehouseItemController.updateWarehouseItem);
 
 // Delete a warehouse item record
-router.delete('/:warehouseId/:itemId', requireAuth, requireRole(['admin','dev','warehouse_admin']), warehouseItemController.deleteWarehouseItem);
+router.delete('/:warehouseId/:itemId/:locationId', requireAuth, requireRole(['admin','dev','warehouse_admin']), warehouseItemController.deleteWarehouseItem);
 
 module.exports = router; 

@@ -1,0 +1,6 @@
+"Order ID","Status","Client","Origin","Destination","Weight","Shipment Date","Delivered At"
+"832e1ff7-64fb-451b-a17a-d7ef3d4886bf","DELIVERED","Caleb Client","5555 W 81st St, Los Angeles, CA, 90210","1234 Delivery St, Upland, CA, 91786","56","2025-05-12T22:04:15.196Z",""
+"0b3e5b4c-3da6-4600-afac-e29729943cec","DELIVERED","Caleb Client","1234 Mayberry Rd, Los Angeles, CA, 90210","1409 Monte Verde Ave, Upland, CA, 91786","45","2025-05-12T21:47:55.761Z",""
+"e6ca732f-f8f0-490f-8851-b4b2935feba6","DELIVERED","Caleb Client","222 Birch St, Los Angeles, CA, 90001","111 Elm St, Upland, CA, 91786","450","2025-05-10T20:44:20.453Z",""
+"6f12d854-652c-48ed-a4c3-f579a17e559b","DELIVERED","4spaceweb.com@gmail.com","1234 Pickup St, Los Angeles, CA, 90210","1234 Delivery St, Oakland, CA, 86653","500","2025-05-21T15:45:00.000Z",""
+"57642782-fa28-4d3d-83d8-17b6ffe883d3","DELIVERED","4spaceweb.com@gmail.com","1409 Monte Verde Ave, Upland, CA, 91786","10400 Arrow Route, Apt. X8, Rancho Cucamonga, CA, 91730","400","2025-05-09T03:10:24.324Z",""

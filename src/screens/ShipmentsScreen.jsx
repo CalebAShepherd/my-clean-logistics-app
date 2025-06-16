@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, Platform, Alert, TouchableOpacity, SafeAreaView, TextInput } from 'react-native';
+import { View, Text, FlatList, StyleSheet, ActivityIndicator, Platform, Alert, TouchableOpacity, SafeAreaView, TextInput, RefreshControl } from 'react-native';
 import { AuthContext } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { useNavigation } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import InternalHeader from '../components/InternalHeader';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-
 
 const API_URL = Platform.OS === 'android'
   ? 'http://10.0.2.2:3000'
@@ -14,9 +15,25 @@ const API_URL = Platform.OS === 'android'
 
 function ShipmentList({ status, shipments, onRefresh, userToken, fetching, settings, searchQuery }) {
   const navigation = useNavigation();
+  const [refreshing, setRefreshing] = useState(false);
+  
   // Map statuses to display labels and colors
-  const statusLabelMap = { CREATED: 'Processing', ASSIGNED: 'Assigned', IN_TRANSIT: 'In Transit', OUT_FOR_DEL: 'Out for Delivery', DELIVERED: 'Completed' };
-  const badgeColors = { CREATED: '#999', ASSIGNED: '#0074D9', IN_TRANSIT: '#FFA500', OUT_FOR_DEL: '#f39c12', DELIVERED: '#4CAF50' };
+  const statusLabelMap = { 
+    CREATED: 'Processing', 
+    ASSIGNED: 'Assigned', 
+    IN_TRANSIT: 'In Transit', 
+    OUT_FOR_DEL: 'Out for Delivery', 
+    DELIVERED: 'Completed' 
+  };
+  
+  const badgeColors = { 
+    CREATED: '#FF9500', 
+    ASSIGNED: '#007AFF', 
+    IN_TRANSIT: '#5856D6', 
+    OUT_FOR_DEL: '#FF9500', 
+    DELIVERED: '#34C759' 
+  };
+
   // Normalize and filter by status
   let filtered = shipments.filter(s => {
     const itemStatus = s.status.trim().toUpperCase();
@@ -29,6 +46,7 @@ function ShipmentList({ status, shipments, onRefresh, userToken, fetching, setti
     }
     return itemStatus === status;
   });
+
   // Filter by search query
   if (searchQuery) {
     const q = searchQuery.toLowerCase();
@@ -58,45 +76,86 @@ function ShipmentList({ status, shipments, onRefresh, userToken, fetching, setti
     }
   };
 
-  if (fetching) {
-    return <ActivityIndicator style={styles.center} size="large" />;
+  const onRefreshList = async () => {
+    setRefreshing(true);
+    await onRefresh();
+    setRefreshing(false);
+  };
+
+  if (fetching && !refreshing) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Loading shipments...</Text>
+      </View>
+    );
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.listContainer}>
       <FlatList
-        style={{ flex: 1 }}
-        nestedScrollEnabled={true}
-        keyboardShouldPersistTaps="handled"
+        style={styles.list}
         data={filtered}
         keyExtractor={item => item.id}
+        contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefreshList}
+            tintColor="#007AFF"
+            colors={['#007AFF']}
+          />
+        }
+        showsVerticalScrollIndicator={false}
         ListEmptyComponent={() => (
-          <View style={styles.center}>
-            <Text style={styles.emptyText}>No shipments</Text>
+          <View style={styles.emptyContainer}>
+            <MaterialCommunityIcons name="truck-outline" size={64} color="#C7C7CC" />
+            <Text style={styles.emptyTitle}>No Shipments Found</Text>
+            <Text style={styles.emptySubtitle}>
+              {searchQuery ? 'Try adjusting your search criteria' : 'No shipments match the current filter'}
+            </Text>
           </View>
         )}
         renderItem={({ item }) => (
           <TouchableOpacity
-            style={styles.card}
+            style={styles.shipmentCard}
             onPress={() => navigation.navigate('Shipment Details', { id: item.id })}
+            activeOpacity={0.7}
           >
             <View style={styles.cardHeader}>
-              <Text style={styles.orderId}>
-                Order ID {item.reference || item.id.substring(0,8)}
-              </Text>
-              <View style={[styles.badge, { backgroundColor: badgeColors[item.status] || '#999' }]}> 
-                <Text style={styles.badgeText}>
-                  {statusLabelMap[item.status] || item.status}
+              <View style={styles.orderInfo}>
+                <Text style={styles.orderId}>
+                  #{item.reference || item.id.substring(0,8)}
                 </Text>
+                <View style={[styles.statusBadge, { backgroundColor: badgeColors[item.status] || '#8E8E93' }]}> 
+                  <Text style={styles.statusText}>
+                    {statusLabelMap[item.status] || item.status}
+                  </Text>
+                </View>
               </View>
             </View>
+            
             {/* Company/client name */}
-            <Text style={styles.companyName}>{item.client?.username}</Text>
-            <View style={styles.addressSection}>
-              <Text style={styles.addressLabel}>Pickup</Text>
-              <Text style={styles.addressText}>{item.origin}</Text>
-              <Text style={styles.addressLabel}>Delivery</Text>
-              <Text style={styles.addressText}>{item.destination}</Text>
+            <Text style={styles.clientName}>{item.client?.username}</Text>
+            
+            <View style={styles.routeContainer}>
+              <View style={styles.locationRow}>
+                <MaterialCommunityIcons name="circle" size={12} color="#34C759" />
+                <View style={styles.locationContent}>
+                  <Text style={styles.locationLabel}>Pickup</Text>
+                  <Text style={styles.locationText}>{item.origin}</Text>
+                </View>
+              </View>
+              
+              <View style={styles.routeLine} />
+              
+              <View style={styles.locationRow}>
+                <MaterialCommunityIcons name="map-marker" size={12} color="#FF3B30" />
+                <View style={styles.locationContent}>
+                  <Text style={styles.locationLabel}>Delivery</Text>
+                  <Text style={styles.locationText}>{item.destination}</Text>
+                </View>
+              </View>
             </View>
           </TouchableOpacity>
         )}
@@ -108,30 +167,28 @@ function ShipmentList({ status, shipments, onRefresh, userToken, fetching, setti
 export default function ShipmentsScreen({ navigation }) {
   const { userToken, user, loading } = useContext(AuthContext);
   const { settings } = useSettings();
-  const [index, setIndex] = useState(0);
   const [shipments, setShipments] = useState([]);
   const [fetching, setFetching] = useState(false);
   const [activeTab, setActiveTab] = useState('CREATED');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const fetchAllShipments = () => {
+  const fetchAllShipments = async () => {
     if (!userToken) return;
     setFetching(true);
-    fetch(`${API_URL}/api/shipments`, {
-      headers: { Authorization: `Bearer ${userToken}` },
-    })
-      .then(res => res.json())
-      .then(data => setShipments(data))
-      .catch(console.error)
-      .finally(() => setFetching(false));
+    try {
+      const res = await fetch(`${API_URL}/api/shipments`, {
+        headers: { Authorization: `Bearer ${userToken}` },
+      });
+      const data = await res.json();
+      setShipments(data);
+    } catch (error) {
+      console.error('Error fetching shipments:', error);
+    } finally {
+      setFetching(false);
+    }
   };
 
   useEffect(() => {
-    fetchAllShipments();
-  }, [userToken]);
-
-  // Refetch all shipments whenever the ShipmentsScreen gains focus
-  React.useEffect(() => {
     fetchAllShipments();
   }, [userToken]);
 
@@ -157,39 +214,89 @@ export default function ShipmentsScreen({ navigation }) {
   };
 
   if (loading || !settings) {
-    return <ActivityIndicator style={styles.center} size="large" />;
-  }
-  if (!user) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.text}>Access Denied</Text>
-      </View>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
+
+  if (!user) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.accessDeniedContainer}>
+          <MaterialCommunityIcons name="lock" size={64} color="#C7C7CC" />
+          <Text style={styles.accessDeniedTitle}>Access Denied</Text>
+          <Text style={styles.accessDeniedText}>You don't have permission to view this screen</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   // Only allow admin or dispatcher
   if (!['admin', 'dispatcher'].includes(user.role)) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.text}>Access Denied</Text>
-      </View>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.accessDeniedContainer}>
+          <MaterialCommunityIcons name="lock" size={64} color="#C7C7CC" />
+          <Text style={styles.accessDeniedTitle}>Access Denied</Text>
+          <Text style={styles.accessDeniedText}>You don't have permission to view this screen</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <InternalHeader navigation={navigation} title="Shipments" />
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Search shipments..."
-        value={searchQuery}
-        onChangeText={setSearchQuery}
+    <SafeAreaView style={styles.container}>
+      <InternalHeader 
+        navigation={navigation} 
+        title="Shipments" 
+        rightIcons={[
+          {
+            icon: 'download',
+            color: '#007AFF',
+            onPress: () => Alert.alert(
+              'Export Shipments',
+              'Choose export format:',
+              [
+                { text: 'CSV', onPress: () => handleExport('csv') },
+                { text: 'PDF', onPress: () => handleExport('pdf') },
+                { text: 'Cancel', style: 'cancel' },
+              ]
+            )
+          }
+        ]}
       />
-      <View style={styles.tabHeader}>
+      
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchInputContainer}>
+          <MaterialCommunityIcons name="magnify" size={20} color="#8E8E93" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search by ID, client, or location..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor="#8E8E93"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <MaterialCommunityIcons name="close-circle" size={20} color="#8E8E93" />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* Tab Header */}
+      <View style={styles.tabContainer}>
         {[
-          ['CREATED', 'Processing'],
-          ['IN_TRANSIT', 'In Transit'],
-          ['DELIVERED', 'Completed']
-        ].map(([status, label]) => (
+          ['CREATED', 'Processing', 'clock-outline'],
+          ['IN_TRANSIT', 'In Transit', 'truck-fast'],
+          ['DELIVERED', 'Completed', 'check-circle-outline']
+        ].map(([status, label, icon]) => (
           <TouchableOpacity
             key={status}
             style={[
@@ -197,7 +304,13 @@ export default function ShipmentsScreen({ navigation }) {
               activeTab === status && styles.tabButtonActive
             ]}
             onPress={() => setActiveTab(status)}
+            activeOpacity={0.7}
           >
+            <MaterialCommunityIcons 
+              name={icon} 
+              size={18} 
+              color={activeTab === status ? '#007AFF' : '#8E8E93'} 
+            />
             <Text
               style={[
                 styles.tabLabel,
@@ -209,6 +322,7 @@ export default function ShipmentsScreen({ navigation }) {
           </TouchableOpacity>
         ))}
       </View>
+
       <ShipmentList
         status={activeTab}
         shipments={shipments}
@@ -218,113 +332,221 @@ export default function ShipmentsScreen({ navigation }) {
         settings={settings}
         searchQuery={searchQuery}
       />
-      {/* Sticky export button above footer navigation */}
-      <TouchableOpacity
-        style={styles.stickyExportButton}
-        onPress={() => Alert.alert(
-          'Export As',
-          null,
-          [
-            { text: 'CSV', onPress: () => handleExport('csv') },
-            { text: 'PDF', onPress: () => handleExport('pdf') },
-            { text: 'Cancel', style: 'cancel' },
-          ]
-        )}
-      >
-        <Text style={styles.stickyExportText}>Export</Text>
-      </TouchableOpacity>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  stickyExportButton: { position: 'absolute', bottom: 16, left: 16, right: 16, backgroundColor: '#007AFF', paddingVertical: 12, borderRadius: 6, alignItems: 'center' },
-  stickyExportText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  searchInput: { borderWidth: 1, borderColor: '#ccc', borderRadius: 6, padding: 8, marginHorizontal: 16, marginTop: 8, marginBottom: 4 },
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
-  text: { fontSize: 18 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  emptyText: { padding: 16, textAlign: 'center' },
-  item: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderColor: '#ccc',
-    backgroundColor: '#fff',
-    marginVertical: 4,
-    borderRadius: 6,
+  container: { 
+    flex: 1,
+    backgroundColor: '#F8F9FA'
   },
-  title: { fontWeight: 'bold', marginBottom: 4 },
-  buttonRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 8,
+  
+  // Loading States
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  tabHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#fff',
+  loadingText: {
+    fontSize: 16,
+    color: '#8E8E93',
+    marginTop: 12,
+  },
+  
+  // Access Denied
+  accessDeniedContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  accessDeniedTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  accessDeniedText: {
+    fontSize: 16,
+    color: '#8E8E93',
+    textAlign: 'center',
+  },
+  
+  // Search Container
+  searchContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: 'white',
     borderBottomWidth: 1,
-    borderColor: '#ccc',
-    marginBottom: '0',
+    borderBottomColor: '#E1E5E9',
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1C1C1E',
+    marginLeft: 8,
+  },
+  
+  // Tab Styles
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E1E5E9',
   },
   tabButton: {
-    paddingHorizontal: 12,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 16,
+    paddingHorizontal: 12,
   },
   tabButtonActive: {
-    borderBottomWidth: 2,
-    borderColor: '#000',
+    borderBottomWidth: 3,
+    borderBottomColor: '#007AFF',
   },
   tabLabel: {
     fontSize: 14,
-    color: 'gray',
-    textTransform: 'uppercase',
+    color: '#8E8E93',
+    fontWeight: '500',
+    marginLeft: 6,
   },
   tabLabelActive: {
-    fontSize: 14,
-    color: '#000',
+    color: '#007AFF',
     fontWeight: '600',
-    textTransform: 'uppercase',
   },
-  card: {
-    padding: 12,
-    // borderBottomWidth: 1,
-    // borderColor: '#ccc',
-    backgroundColor: '#fff',
-    marginVertical: 4,
-    marginHorizontal: 16,
-    borderRadius: 8,
+  
+  // List Styles
+  listContainer: {
+    flex: 1,
   },
+  list: {
+    flex: 1,
+  },
+  listContent: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 32,
+  },
+  
+  // Empty State
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 16,
+    color: '#8E8E93',
+    textAlign: 'center',
+  },
+  
+  // Shipment Card Styles
+  shipmentCard: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+  },
+  
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 12,
   },
+  
+  orderInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  
   orderId: {
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1C1E',
   },
-  badge: {
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    borderRadius: 8,
+  
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
-  badgeText: {
+  
+  statusText: {
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    color: 'white',
   },
-  addressSection: {
-    marginTop: 8,
-  },
-  addressLabel: {
-    fontWeight: 'bold',
-  },
-  addressText: {
-    marginTop: 4,
-  },
-  companyName: {
+  
+  clientName: {
     fontSize: 18,
     fontWeight: '600',
-    marginTop: 4,
+    color: '#1C1C1E',
+    marginBottom: 16,
+  },
+  
+  // Route Container
+  routeContainer: {
+    paddingLeft: 8,
+  },
+  
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  
+  locationContent: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  
+  locationLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#8E8E93',
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  
+  locationText: {
+    fontSize: 14,
+    color: '#1C1C1E',
+    lineHeight: 18,
+  },
+  
+  routeLine: {
+    width: 1,
+    height: 16,
+    backgroundColor: '#E1E5E9',
+    marginLeft: 6,
     marginBottom: 8,
   },
 });

@@ -47,6 +47,27 @@ model User {
   accounts                              Account[]
   tenantId                              String?
   tenant                                Tenant?        @relation(fields: [tenantId], references: [id])
+  conversationParticipants              ConversationParticipant[]
+  sentMessages                          Message[]
+  
+  // Pick & Pack Operations Relations
+  createdWaves                          Wave[]         @relation("WaveCreator")
+  assignedWaves                         Wave[]         @relation("WaveAssignedPicker")
+  assignedPickLists                     PickList[]     @relation("PickListAssignedPicker")
+  pickTasks                             PickTask[]     @relation("PickTaskPicker")
+  verifiedPickTasks                     PickTask[]     @relation("PickTaskVerifier")
+  packingSlips                          PackingSlip[]  @relation("PackingSlipPacker")
+  
+  // Receiving & Put-Away Operations Relations
+  receipts                              Receipt[]      @relation("ReceiptReceiver")
+  assignedPutAwayTasks                  PutAwayTask[]  @relation("PutAwayAssignedUser")
+  assignedCrossDockTasks                CrossDockTask[] @relation("CrossDockAssignedUser")
+  
+  // Cycle Counting Relations
+  createdCycleCounts                    CycleCount[]   @relation("CycleCountCreatedBy")
+  assignedCycleCounts                   CycleCount[]   @relation("CycleCountAssignedTo")
+  assignedCountTasks                    CycleCountTask[] @relation("CycleCountTaskAssignedTo")
+  countedItems                          CycleCountItem[] @relation("CycleCountItemCountedBy")
 }
 
 model Shipment {
@@ -104,6 +125,15 @@ model Shipment {
   documents                         Document[]
   palletCount                       Int             @default(0)
   shipmentUpdates                   ShipmentUpdate[]
+  
+  // Pick & Pack Operations Relations
+  waveOrders                        WaveOrder[]
+  pickTasks                         PickTask[]
+  packingSlips                      PackingSlip[]
+  
+  // Receiving & Cross-Dock Relations
+  crossDockInbound                  CrossDockTask[] @relation("CrossDockInbound")
+  crossDockOutbound                 CrossDockTask[] @relation("CrossDockOutbound")
 }
 
 model Carrier {
@@ -119,6 +149,8 @@ model CompanySettings {
   id                         String   @id @default(uuid())
   companyName                String?
   logoUrl                    String?
+  
+  // Existing core feature flags
   hasWarehouses              Boolean  @default(false)
   ownTransporters            Boolean  @default(false)
   useThirdPartyCarriers      Boolean  @default(true)
@@ -129,6 +161,83 @@ model CompanySettings {
   enableNotifications        Boolean  @default(true)
   enableDevTools             Boolean  @default(false)
   enableWarehouseHeatmap     Boolean  @default(true)
+  
+  // === WAREHOUSE MANAGEMENT FEATURES ===
+  // Core Operations
+  enableReceivingWorkflows     Boolean  @default(false)
+  enablePickPackOperations     Boolean  @default(false)
+  enableCrossDocking          Boolean  @default(false)
+  enableCycleCountingAdvanced Boolean  @default(false)
+  enableSlottingOptimization  Boolean  @default(false)
+  enableYardManagement        Boolean  @default(false)
+  enableLaborManagement       Boolean  @default(false)
+  enableReturnsManagement     Boolean  @default(false)
+  enableValueAddedServices   Boolean  @default(false)
+  enableQualityControl       Boolean  @default(false)
+  enableKittingAssembly      Boolean  @default(false)
+  enableWaveManagement       Boolean  @default(false)
+  
+  // Advanced Features
+  enableAdvancedAnalytics    Boolean  @default(false)
+  enablePredictiveAnalytics  Boolean  @default(false)
+  enableTaskAutomation       Boolean  @default(false)
+  enableExceptionHandling    Boolean  @default(false)
+  enablePerformanceTracking  Boolean  @default(false)
+  enableWorkflowOptimization Boolean  @default(false)
+  
+  // === BUSINESS MODEL FLAGS ===
+  // Service Type Flags
+  is3PL                       Boolean  @default(false)
+  isEcommerceFulfillment     Boolean  @default(false)
+  isManufacturerWarehouse    Boolean  @default(false)
+  isDistributionCenter       Boolean  @default(false)
+  isRetailWarehouse          Boolean  @default(false)
+  isColdStorage              Boolean  @default(false)
+  isHazmatFacility           Boolean  @default(false)
+  isCustomsWarehouse         Boolean  @default(false)
+  
+  // === BILLING & SERVICE FLAGS ===
+  enableStorageBilling        Boolean  @default(false)
+  enableHandlingCharges       Boolean  @default(false)
+  enableTransportationBilling Boolean  @default(false)
+  enableAccessorialCharges    Boolean  @default(false)
+  enableClientPortals         Boolean  @default(false)
+  enableMultiClientInventory  Boolean  @default(false)
+  enableSLATracking          Boolean  @default(false)
+  enableServiceLevelBilling  Boolean  @default(false)
+  enableUsageBasedBilling    Boolean  @default(false)
+  enableContractManagement   Boolean  @default(false)
+  
+  // === INTEGRATION FLAGS ===
+  enableEDIIntegration       Boolean  @default(false)
+  enableAPIAccess            Boolean  @default(false)
+  enableBarcodeScanning      Boolean  @default(false)
+  enableRFIDTracking         Boolean  @default(false)
+  enableVoicePicking         Boolean  @default(false)
+  enableMobileScanning       Boolean  @default(false)
+  enableIoTSensors          Boolean  @default(false)
+  enableAutomatedSorting     Boolean  @default(false)
+  enableRoboticIntegration   Boolean  @default(false)
+  
+  // Client/Customer Features
+  enableClientDashboards     Boolean  @default(false)
+  enableClientReporting      Boolean  @default(false)
+  enableClientNotifications  Boolean  @default(false)
+  enableClientDocuments      Boolean  @default(false)
+  enableClientOrderPortal    Boolean  @default(false)
+  enableClientInventoryView  Boolean  @default(false)
+  enableClientBilling        Boolean  @default(false)
+  
+  // Compliance & Security
+  enableAuditTrail          Boolean  @default(false)
+  enableComplianceReporting Boolean  @default(false)
+  enableSecurityMonitoring  Boolean  @default(false)
+  enableAccessControl       Boolean  @default(false)
+  enableDataEncryption      Boolean  @default(false)
+  enableGDPRCompliance      Boolean  @default(false)
+  enableSOXCompliance       Boolean  @default(false)
+  
+  // Existing theme and integration settings
   primaryColor               String?   @default("#007AFF")
   secondaryColor             String?   @default("#FFFFFF")
   accentColor                String?   @default("#FFAA00")
@@ -155,6 +264,22 @@ model Warehouse {
   shipments                                              Shipment[]
   administrators                                         User[]          @relation("WarehouseAdmin")
   warehouseReports                                       WarehouseReport[]
+  
+  // Pick & Pack Operations Relations
+  waves                                                  Wave[]
+  pickLists                                              PickList[]
+  packingSlips                                           PackingSlip[]
+  
+  // Receiving & Put-Away Operations Relations
+  asns                                                   ASN[]
+  appointments                                           Appointment[]
+  dockDoors                                              DockDoor[]
+  receipts                                               Receipt[]
+  putAwayTasks                                           PutAwayTask[]
+  crossDockTasks                                         CrossDockTask[]
+  
+  // Cycle Counting Relations
+  cycleCounts                                            CycleCount[]
 }
 
 model DamageReport {
@@ -207,6 +332,20 @@ model InventoryItem {
   // Supplier for the inventory item
   supplierId    String?
   supplier      Supplier?      @relation(fields: [supplierId], references: [id])
+  
+  // Pick & Pack Operations Relations
+  pickTasks     PickTask[]
+  packingTasks  PackingTask[]
+  substitutions PickTask[] @relation("PickTaskSubstitution")
+  
+  // Receiving & Put-Away Operations Relations
+  asnItems      ASNItem[]
+  receiptItems  ReceiptItem[]
+  putAwayTasks  PutAwayTask[]
+  crossDockTasks CrossDockTask[]
+  
+  // Cycle Counting Relations
+  cycleCountItems CycleCountItem[] @relation("CycleCountInventoryItem")
 }
 
 model Location {
@@ -222,6 +361,17 @@ model Location {
   updatedAt     DateTime        @default(now())
   Warehouse     Warehouse       @relation(fields: [warehouseId], references: [id])
   WarehouseItem WarehouseItem[]
+  
+  // Pick & Pack Operations Relations
+  pickTasks     PickTask[]
+  
+  // Receiving & Put-Away Operations Relations  
+  putAwayFromTasks PutAwayTask[] @relation("PutAwayFromLocation")
+  putAwayToTasks   PutAwayTask[] @relation("PutAwayToLocation")
+  
+  // Cycle Counting Relations
+  cycleCountTasks   CycleCountTask[] @relation("CycleCountTaskLocation")
+  cycleCountItems   CycleCountItem[] @relation("CycleCountItemLocation")
 
   @@index([warehouseId])
 }
@@ -288,16 +438,16 @@ model TransferOrder {
 model WarehouseItem {
   warehouseId   String
   itemId        String
-  locationId    String?
+  locationId    String
   quantity      Int           @default(0)
   minThreshold  Int           @default(0)
   maxThreshold  Int?
   expiresAt     DateTime?
   InventoryItem InventoryItem @relation(fields: [itemId], references: [id])
-  Location      Location?     @relation(fields: [locationId], references: [id])
+  Location      Location      @relation(fields: [locationId], references: [id])
   Warehouse     Warehouse     @relation(fields: [warehouseId], references: [id])
 
-  @@id([warehouseId, itemId])
+  @@id([warehouseId, itemId, locationId])
 }
 
 model TransporterLocation {
@@ -562,6 +712,10 @@ model Supplier {
   contactInfo String?
 
   InventoryItem InventoryItem[]
+  
+  // Receiving & Put-Away Operations Relations
+  asns          ASN[]
+  appointments  Appointment[]
 }
 
 /// Warehouse report for scheduled daily summaries
@@ -574,4 +728,811 @@ model WarehouseReport {
   warehouse     Warehouse @relation(fields: [warehouseId], references: [id])
 
   @@index([warehouseId])
+}
+
+// Chat feature models
+model Conversation {
+  id              String                      @id @default(uuid())
+  name            String?                     // Optional custom name for group chats
+  participants    ConversationParticipant[]
+  messages        Message[]
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+}
+
+model ConversationParticipant {
+  id              String                      @id @default(uuid())
+  conversationId  String
+  userId          String
+  conversation    Conversation                @relation(fields: [conversationId], references: [id])
+  user            User                        @relation(fields: [userId], references: [id])
+  @@index([conversationId, userId])
+}
+
+model Message {
+  id              String                      @id @default(uuid())
+  conversationId  String
+  senderId        String
+  content         String?
+  contentType     String                      @default("text")
+  fileUrl         String?
+  status          MessageStatus               @default(SENT)
+  deliveredAt     DateTime?
+  readAt          DateTime?
+  createdAt       DateTime                    @default(now())
+  conversation    Conversation                @relation(fields: [conversationId], references: [id])
+  sender          User                        @relation(fields: [senderId], references: [id])
+  @@index([conversationId])
+}
+
+// Message status enum
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+}
+
+// === PICK & PACK OPERATIONS MODELS ===
+
+// Wave represents a batch of orders to be picked together
+model Wave {
+  id              String      @id @default(uuid())
+  waveNumber      String      @unique
+  warehouseId     String
+  status          WaveStatus  @default(CREATED)
+  priority        Int         @default(1)
+  plannedStartTime DateTime?
+  actualStartTime DateTime?
+  plannedEndTime  DateTime?
+  actualEndTime   DateTime?
+  createdBy       String
+  assignedPickerId String?
+  totalOrders     Int         @default(0)
+  totalItems      Int         @default(0)
+  completedItems  Int         @default(0)
+  notes           String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  warehouse       Warehouse   @relation(fields: [warehouseId], references: [id])
+  creator         User        @relation("WaveCreator", fields: [createdBy], references: [id])
+  assignedPicker  User?       @relation("WaveAssignedPicker", fields: [assignedPickerId], references: [id])
+  pickLists       PickList[]
+  waveOrders      WaveOrder[]
+
+  @@index([warehouseId, status])
+  @@index([assignedPickerId])
+}
+
+// Links orders/shipments to waves
+model WaveOrder {
+  id         String   @id @default(uuid())
+  waveId     String
+  shipmentId String
+  priority   Int      @default(1)
+  addedAt    DateTime @default(now())
+
+  // Relations
+  wave       Wave     @relation(fields: [waveId], references: [id], onDelete: Cascade)
+  shipment   Shipment @relation(fields: [shipmentId], references: [id])
+
+  @@unique([waveId, shipmentId])
+  @@index([waveId])
+}
+
+// Pick list generated for a wave
+model PickList {
+  id              String         @id @default(uuid())
+  listNumber      String         @unique
+  waveId          String
+  warehouseId     String
+  assignedPickerId String?
+  status          PickListStatus @default(PENDING)
+  pickingMethod   PickingMethod  @default(BATCH)
+  zone            String?
+  plannedStartTime DateTime?
+  actualStartTime DateTime?
+  plannedEndTime  DateTime?
+  actualEndTime   DateTime?
+  totalTasks      Int            @default(0)
+  completedTasks  Int            @default(0)
+  optimizedRoute  Json?          // Optimized picking route
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relations
+  wave            Wave           @relation(fields: [waveId], references: [id], onDelete: Cascade)
+  warehouse       Warehouse      @relation(fields: [warehouseId], references: [id])
+  assignedPicker  User?          @relation("PickListAssignedPicker", fields: [assignedPickerId], references: [id])
+  pickTasks       PickTask[]
+  packingSlips    PackingSlip[]
+
+  @@index([waveId])
+  @@index([assignedPickerId, status])
+}
+
+// Individual pick task for a specific item and location
+model PickTask {
+  id               String         @id @default(uuid())
+  pickListId       String
+  shipmentId       String
+  inventoryItemId  String
+  locationId       String
+  quantityRequired Int
+  quantityPicked   Int            @default(0)
+  status           PickTaskStatus @default(PENDING)
+  pickSequence     Int            // Order in which to pick
+  pickerId         String?
+  pickedAt         DateTime?
+  verifiedBy       String?
+  verifiedAt       DateTime?
+  qcPassed         Boolean?
+  qcNotes          String?
+  substitutionId   String?        // If item was substituted
+  damageQuantity   Int            @default(0)
+  notes            String?
+  barcodeScanned   Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  // Relations
+  pickList         PickList       @relation(fields: [pickListId], references: [id], onDelete: Cascade)
+  shipment         Shipment       @relation(fields: [shipmentId], references: [id])
+  inventoryItem    InventoryItem  @relation(fields: [inventoryItemId], references: [id])
+  location         Location       @relation(fields: [locationId], references: [id])
+  picker           User?          @relation("PickTaskPicker", fields: [pickerId], references: [id])
+  verifier         User?          @relation("PickTaskVerifier", fields: [verifiedBy], references: [id])
+  substitution     InventoryItem? @relation("PickTaskSubstitution", fields: [substitutionId], references: [id])
+
+  @@index([pickListId, pickSequence])
+  @@index([status, pickerId])
+  @@index([shipmentId])
+}
+
+// Packing slip generated for shipments
+model PackingSlip {
+  id              String            @id @default(uuid())
+  slipNumber      String            @unique
+  pickListId      String?
+  shipmentId      String
+  warehouseId     String
+  packerId        String?
+  status          PackingSlipStatus @default(PENDING)
+  packingMethod   PackingMethod     @default(MANUAL)
+  totalItems      Int               @default(0)
+  packedItems     Int               @default(0)
+  totalWeight     Float?
+  totalDimensions Json?             // {length, width, height}
+  packingStartedAt DateTime?
+  packingCompletedAt DateTime?
+  qcCompletedAt   DateTime?
+  shippingLabelGenerated Boolean    @default(false)
+  trackingNumber  String?
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  // Relations
+  pickList        PickList?         @relation(fields: [pickListId], references: [id])
+  shipment        Shipment          @relation(fields: [shipmentId], references: [id])
+  warehouse       Warehouse         @relation(fields: [warehouseId], references: [id])
+  packer          User?             @relation("PackingSlipPacker", fields: [packerId], references: [id])
+  packingTasks    PackingTask[]
+  packages        Package[]
+
+  @@index([shipmentId])
+  @@index([status, packerId])
+}
+
+// Individual packing task for items
+model PackingTask {
+  id               String         @id @default(uuid())
+  packingSlipId    String
+  inventoryItemId  String
+  quantityToPack   Int
+  quantityPacked   Int            @default(0)
+  status           PackingTaskStatus @default(PENDING)
+  packageId        String?
+  packedAt         DateTime?
+  notes            String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  // Relations
+  packingSlip      PackingSlip    @relation(fields: [packingSlipId], references: [id], onDelete: Cascade)
+  inventoryItem    InventoryItem  @relation(fields: [inventoryItemId], references: [id])
+  package          Package?       @relation(fields: [packageId], references: [id])
+
+  @@index([packingSlipId])
+}
+
+// Package/box used for packing
+model Package {
+  id              String         @id @default(uuid())
+  packageNumber   String         @unique
+  packingSlipId   String
+  packageType     PackageType    @default(BOX)
+  dimensions      Json?          // {length, width, height}
+  weight          Float?
+  maxWeight       Float?
+  trackingNumber  String?
+  status          PackageStatus  @default(OPEN)
+  sealedAt        DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relations
+  packingSlip     PackingSlip    @relation(fields: [packingSlipId], references: [id], onDelete: Cascade)
+  packingTasks    PackingTask[]
+
+  @@index([packingSlipId])
+}
+
+// Enums for Pick & Pack Operations
+enum WaveStatus {
+  CREATED
+  PLANNED
+  RELEASED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PickListStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  PICKING_COMPLETE
+  QC_PENDING
+  QC_COMPLETE
+  COMPLETED
+  CANCELLED
+}
+
+enum PickingMethod {
+  SINGLE_ORDER    // Pick one order at a time
+  BATCH          // Pick multiple orders together
+  ZONE           // Pick by warehouse zone
+  WAVE           // Pick entire wave
+}
+
+enum PickTaskStatus {
+  PENDING
+  IN_PROGRESS
+  PICKED
+  QC_PENDING
+  QC_PASSED
+  QC_FAILED
+  COMPLETED
+  CANCELLED
+}
+
+enum PackingSlipStatus {
+  PENDING
+  IN_PROGRESS
+  PACKED
+  QC_PENDING
+  QC_PASSED
+  QC_FAILED
+  SHIPPED
+  CANCELLED
+}
+
+enum PackingTaskStatus {
+  PENDING
+  IN_PROGRESS
+  PACKED
+  COMPLETED
+}
+
+enum PackingMethod {
+  MANUAL
+  AUTOMATED
+  SEMI_AUTOMATED
+}
+
+enum PackageType {
+  BOX
+  ENVELOPE
+  TUBE
+  PALLET
+  CUSTOM
+}
+
+enum PackageStatus {
+  OPEN
+  SEALED
+  SHIPPED
+  DELIVERED
+}
+
+// === RECEIVING & PUT-AWAY OPERATIONS MODELS ===
+
+// Advanced Shipping Notice - notification of incoming shipments
+model ASN {
+  id                String      @id @default(uuid())
+  asnNumber         String      @unique
+  supplierId        String?
+  carrierName       String?
+  driverName        String?
+  driverPhone       String?
+  vehicleInfo       String?
+  warehouseId       String
+  expectedArrival   DateTime
+  actualArrival     DateTime?
+  status            ASNStatus   @default(PENDING)
+  totalPallets      Int         @default(0)
+  totalCases        Int         @default(0)
+  totalWeight       Float?
+  referenceNumber   String?
+  poNumber          String?
+  trailerNumber     String?
+  sealNumber        String?
+  temperature       Float?      // For temperature-controlled shipments
+  specialHandling   String?     // Fragile, hazmat, etc.
+  notes             String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  // Relations
+  warehouse         Warehouse   @relation(fields: [warehouseId], references: [id])
+  supplier          Supplier?   @relation(fields: [supplierId], references: [id])
+  asnItems          ASNItem[]
+  appointments      Appointment[]
+  receipts          Receipt[]
+  crossDockTasks    CrossDockTask[]
+
+  @@index([warehouseId, status])
+  @@index([expectedArrival])
+}
+
+// Items expected in an ASN
+model ASNItem {
+  id              String        @id @default(uuid())
+  asnId           String
+  inventoryItemId String
+  expectedQty     Int
+  receivedQty     Int           @default(0)
+  unitCost        Float?
+  lotNumber       String?
+  expirationDate  DateTime?
+  condition       ItemCondition @default(GOOD)
+  notes           String?
+  createdAt       DateTime      @default(now())
+
+  // Relations
+  asn             ASN           @relation(fields: [asnId], references: [id], onDelete: Cascade)
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  receiptItems    ReceiptItem[]
+
+  @@index([asnId])
+  @@index([inventoryItemId])
+}
+
+// Appointment scheduling for dock doors
+model Appointment {
+  id              String            @id @default(uuid())
+  appointmentNumber String          @unique
+  asnId           String?
+  warehouseId     String
+  dockDoorId      String?
+  supplierId      String?
+  carrierName     String?
+  driverName      String?
+  driverPhone     String?
+  scheduledDate   DateTime
+  scheduledTimeSlot String          // e.g., "08:00-10:00"
+  duration        Int               @default(120) // minutes
+  status          AppointmentStatus @default(SCHEDULED)
+  appointmentType AppointmentType   @default(RECEIVING)
+  priority        Int               @default(1)
+  specialRequirements String?
+  equipment       String?           // Forklift, dock plate, etc.
+  checkedInAt     DateTime?
+  checkedOutAt    DateTime?
+  actualDuration  Int?              // actual minutes
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  // Relations
+  warehouse       Warehouse         @relation(fields: [warehouseId], references: [id])
+  asn             ASN?              @relation(fields: [asnId], references: [id])
+  supplier        Supplier?         @relation(fields: [supplierId], references: [id])
+  dockDoor        DockDoor?         @relation(fields: [dockDoorId], references: [id])
+
+  @@index([warehouseId, scheduledDate])
+  @@index([status])
+}
+
+// Dock door management
+model DockDoor {
+  id              String        @id @default(uuid())
+  doorNumber      String
+  warehouseId     String
+  doorType        DockDoorType  @default(RECEIVING)
+  status          DockDoorStatus @default(AVAILABLE)
+  equipment       String?       // Dock plate, forklift access, etc.
+  maxTrailerSize  String?       // 53ft, 48ft, etc.
+  heightRestriction Float?      // in feet
+  isTemperatureControlled Boolean @default(false)
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  warehouse       Warehouse     @relation(fields: [warehouseId], references: [id])
+  appointments    Appointment[]
+  receipts        Receipt[]
+
+  @@unique([warehouseId, doorNumber])
+  @@index([warehouseId])
+}
+
+// Receipt processing when goods arrive
+model Receipt {
+  id              String        @id @default(uuid())
+  receiptNumber   String        @unique
+  asnId           String?
+  warehouseId     String
+  dockDoorId      String?
+  receivedBy      String
+  status          ReceiptStatus @default(IN_PROGRESS)
+  receiptMethod   ReceiptMethod @default(MANUAL)
+  totalItems      Int           @default(0)
+  receivedItems   Int           @default(0)
+  discrepancies   Int           @default(0)
+  startTime       DateTime?
+  endTime         DateTime?
+  qcRequired      Boolean       @default(false)
+  qcCompleted     Boolean       @default(false)
+  qcPassed        Boolean?
+  qcNotes         String?
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  asn             ASN?          @relation(fields: [asnId], references: [id])
+  warehouse       Warehouse     @relation(fields: [warehouseId], references: [id])
+  dockDoor        DockDoor?     @relation(fields: [dockDoorId], references: [id])
+  receiver        User          @relation("ReceiptReceiver", fields: [receivedBy], references: [id])
+  receiptItems    ReceiptItem[]
+  putAwayTasks    PutAwayTask[]
+
+  @@index([warehouseId, status])
+  @@index([receivedBy])
+}
+
+// Individual items being received
+model ReceiptItem {
+  id                String        @id @default(uuid())
+  receiptId         String
+  asnItemId         String?
+  inventoryItemId   String
+  expectedQty       Int
+  receivedQty       Int
+  damagedQty        Int           @default(0)
+  condition         ItemCondition @default(GOOD)
+  lotNumber         String?
+  expirationDate    DateTime?
+  unitCost          Float?
+  discrepancyReason String?
+  qcStatus          QCStatus?
+  qcNotes           String?
+  receivedAt        DateTime?
+  notes             String?
+  createdAt         DateTime      @default(now())
+
+  // Relations
+  receipt           Receipt       @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  asnItem           ASNItem?      @relation(fields: [asnItemId], references: [id])
+  inventoryItem     InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  putAwayTasks      PutAwayTask[]
+
+  @@index([receiptId])
+  @@index([inventoryItemId])
+}
+
+// Put-away tasks to store received items
+model PutAwayTask {
+  id              String           @id @default(uuid())
+  taskNumber      String           @unique
+  receiptId       String
+  receiptItemId   String
+  warehouseId     String
+  fromLocationId  String?          // Staging location
+  toLocationId    String?          // Final storage location
+  inventoryItemId String
+  quantity        Int
+  assignedTo      String?
+  status          PutAwayStatus    @default(PENDING)
+  priority        Int              @default(1)
+  putAwayMethod   PutAwayMethod    @default(MANUAL)
+  suggestedLocation String?        // AI/system suggested location
+  equipment       String?          // Forklift, pallet jack, etc.
+  startTime       DateTime?
+  endTime         DateTime?
+  notes           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  // Relations
+  receipt         Receipt          @relation(fields: [receiptId], references: [id])
+  receiptItem     ReceiptItem      @relation(fields: [receiptItemId], references: [id])
+  warehouse       Warehouse        @relation(fields: [warehouseId], references: [id])
+  fromLocation    Location?        @relation("PutAwayFromLocation", fields: [fromLocationId], references: [id])
+  toLocation      Location?        @relation("PutAwayToLocation", fields: [toLocationId], references: [id])
+  inventoryItem   InventoryItem    @relation(fields: [inventoryItemId], references: [id])
+  assignedUser    User?            @relation("PutAwayAssignedUser", fields: [assignedTo], references: [id])
+
+  @@index([warehouseId, status])
+  @@index([assignedTo])
+  @@index([receiptId])
+}
+
+// Cross-dock operations - direct transfer without storage
+model CrossDockTask {
+  id              String            @id @default(uuid())
+  taskNumber      String            @unique
+  asnId           String?
+  inboundShipmentId String?
+  outboundShipmentId String
+  warehouseId     String
+  inventoryItemId String
+  quantity        Int
+  status          CrossDockStatus   @default(PENDING)
+  priority        Int               @default(1)
+  assignedTo      String?
+  stagingLocation String?
+  startTime       DateTime?
+  endTime         DateTime?
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  // Relations
+  asn             ASN?              @relation(fields: [asnId], references: [id])
+  inboundShipment Shipment?         @relation("CrossDockInbound", fields: [inboundShipmentId], references: [id])
+  outboundShipment Shipment         @relation("CrossDockOutbound", fields: [outboundShipmentId], references: [id])
+  warehouse       Warehouse         @relation(fields: [warehouseId], references: [id])
+  inventoryItem   InventoryItem     @relation(fields: [inventoryItemId], references: [id])
+  assignedUser    User?             @relation("CrossDockAssignedUser", fields: [assignedTo], references: [id])
+
+  @@index([warehouseId, status])
+  @@index([assignedTo])
+}
+
+// Enums for Receiving & Put-Away Operations
+enum ASNStatus {
+  PENDING
+  SCHEDULED
+  IN_TRANSIT
+  ARRIVED
+  RECEIVING
+  RECEIVED
+  COMPLETED
+  CANCELLED
+}
+
+enum ItemCondition {
+  GOOD
+  DAMAGED
+  EXPIRED
+  RETURNED
+  QUARANTINE
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  CHECKED_IN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum AppointmentType {
+  RECEIVING
+  SHIPPING
+  PICKUP
+  MAINTENANCE
+  INSPECTION
+}
+
+enum DockDoorType {
+  RECEIVING
+  SHIPPING
+  CROSS_DOCK
+  MAINTENANCE
+}
+
+enum DockDoorStatus {
+  AVAILABLE
+  OCCUPIED
+  SCHEDULED
+  MAINTENANCE
+  OUT_OF_SERVICE
+}
+
+enum ReceiptStatus {
+  PENDING
+  IN_PROGRESS
+  QC_PENDING
+  QC_FAILED
+  COMPLETED
+  CANCELLED
+}
+
+enum ReceiptMethod {
+  MANUAL
+  BARCODE
+  RFID
+  MOBILE
+}
+
+enum QCStatus {
+  PENDING
+  PASSED
+  FAILED
+  QUARANTINE
+}
+
+enum PutAwayStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PutAwayMethod {
+  MANUAL
+  DIRECTED
+  AUTOMATED
+  BATCH
+}
+
+enum CrossDockStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  STAGED
+  COMPLETED
+  CANCELLED
+}
+
+// Cycle Counting System Models
+model CycleCount {
+  id              String            @id @default(uuid())
+  name            String
+  description     String?
+  warehouseId     String
+  countType       CycleCountType    @default(RANDOM)
+  frequency       CycleCountFrequency @default(MONTHLY)
+  status          CycleCountStatus  @default(SCHEDULED)
+  scheduledDate   DateTime
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdById     String
+  assignedToId    String?
+  lastCountDate   DateTime?
+  nextCountDate   DateTime?
+  settings        Json?             // Configuration like item selection criteria, location filters, etc.
+  
+  // Relations
+  warehouse       Warehouse         @relation(fields: [warehouseId], references: [id])
+  createdBy       User              @relation("CycleCountCreatedBy", fields: [createdById], references: [id])
+  assignedTo      User?             @relation("CycleCountAssignedTo", fields: [assignedToId], references: [id])
+  tasks           CycleCountTask[]
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([warehouseId])
+  @@index([status])
+  @@index([scheduledDate])
+}
+
+model CycleCountTask {
+  id              String            @id @default(uuid())
+  cycleCountId    String
+  locationId      String?
+  zone            String?
+  status          CycleCountTaskStatus @default(PENDING)
+  assignedToId    String?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  notes           String?
+  varianceFlag    Boolean           @default(false)
+  accuracyRate    Float?            // Percentage of items counted correctly
+  
+  // Relations
+  cycleCount      CycleCount        @relation(fields: [cycleCountId], references: [id], onDelete: Cascade)
+  location        Location?         @relation("CycleCountTaskLocation", fields: [locationId], references: [id])
+  assignedTo      User?             @relation("CycleCountTaskAssignedTo", fields: [assignedToId], references: [id])
+  items           CycleCountItem[]
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([cycleCountId])
+  @@index([status])
+  @@index([assignedToId])
+}
+
+model CycleCountItem {
+  id              String            @id @default(uuid())
+  taskId          String
+  itemId          String
+  locationId      String
+  expectedQty     Int
+  countedQty      Int?
+  variance        Int?              // countedQty - expectedQty
+  variancePercent Float?            // (variance / expectedQty) * 100
+  status          CycleCountItemStatus @default(PENDING)
+  notes           String?
+  countedById     String?
+  countedAt       DateTime?
+  reason          String?           // Reason for variance
+  
+  // Relations
+  task            CycleCountTask    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  item            InventoryItem     @relation("CycleCountInventoryItem", fields: [itemId], references: [id])
+  location        Location          @relation("CycleCountItemLocation", fields: [locationId], references: [id])
+  countedBy       User?             @relation("CycleCountItemCountedBy", fields: [countedById], references: [id])
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([taskId])
+  @@index([status])
+  @@index([variance])
+}
+
+enum CycleCountType {
+  RANDOM
+  ABC_ANALYSIS
+  VELOCITY_BASED
+  LOCATION_BASED
+  FULL_WAREHOUSE
+  CUSTOM
+}
+
+enum CycleCountFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUALLY
+  CUSTOM
+}
+
+enum CycleCountStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  ON_HOLD
+}
+
+enum CycleCountTaskStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  PAUSED
+  CANCELLED
+}
+
+enum CycleCountItemStatus {
+  PENDING
+  COUNTED
+  VARIANCE_REVIEW
+  APPROVED
+  REJECTED
+  RECOUNTED
 }

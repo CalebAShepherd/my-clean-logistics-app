@@ -15,6 +15,7 @@ import AdminCarriersScreen from '../screens/AdminCarriersScreen';
 import ShipmentTrackingScreen from '../screens/ShipmentTrackingScreen';
 import MyShipmentsScreen from '../screens/MyShipmentsScreen';
 import CompanySettingsScreen from '../screens/CompanySettingsScreen';
+import FeatureManagementScreen from '../screens/FeatureManagementScreen';
 import WarehousesScreen from '../screens/WarehousesScreen';
 import TransportManagementScreen from '../screens/TransportManagementScreen';
 import ManageTransportersScreen from '../screens/ManageTransportersScreen';
@@ -64,6 +65,24 @@ import DamageReportsScreen from '../screens/DamageReportsScreen';
 import AddSupplierScreen from '../screens/AddSupplierScreen';
 import Warehouse3DView from '../screens/Warehouse3DView';
 import Warehouse3DHeatmapView from '../screens/Warehouse3DHeatmapView';
+import ConversationListScreen from '../screens/ConversationListScreen';
+import ChatScreen from '../screens/ChatScreen';
+import NewConversationScreen from '../screens/NewConversationScreen';
+import GroupInfoScreen from '../screens/GroupInfoScreen';
+import WaveManagementScreen from '../screens/WaveManagementScreen';
+import PickListScreen from '../screens/PickListScreen';
+import ASNManagementScreen from '../screens/ASNManagementScreen';
+import ReceivingManagementScreen from '../screens/ReceivingManagementScreen';
+import PutAwayManagementScreen from '../screens/PutAwayManagementScreen';
+import DockManagementScreen from '../screens/DockManagementScreen';
+import DockDoorDetailsScreen from '../screens/DockDoorDetailsScreen';
+import AppointmentSchedulingScreen from '../screens/AppointmentSchedulingScreen';
+import AppointmentDetailsScreen from '../screens/AppointmentDetailsScreen';
+import CrossDockManagementScreen from '../screens/CrossDockManagementScreen';
+import CycleCountManagementScreen from '../screens/CycleCountManagementScreen';
+import CycleCountDetailsScreen from '../screens/CycleCountDetailsScreen';
+import CreateCycleCountScreen from '../screens/CreateCycleCountScreen';
+import MobileCycleCountScreen from '../screens/MobileCycleCountScreen';
 
 const AuthStack = createStackNavigator();
 const Drawer = createDrawerNavigator();
@@ -97,32 +116,81 @@ function TransporterTabsNavigator() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarIcon: ({ color, size }) => {
+        tabBarIcon: ({ color, size, focused }) => {
           let iconName;
           if (route.name === 'Home') {
-            iconName = 'home-outline';
+            iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'MyRoutes') {
-            iconName = 'list-outline';
+            iconName = focused ? 'list' : 'list-outline';
           } else if (route.name === 'Notifications') {
-            iconName = 'notifications-outline';
+            iconName = focused ? 'notifications' : 'notifications-outline';
           } else if (route.name === 'Account') {
-            iconName = 'person-outline';
+            iconName = focused ? 'person' : 'person-outline';
           }
-          return <Ionicons name={iconName} size={size} color={color} />;
+          return (
+            <View style={{
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 50,
+              height: 50,
+              borderRadius: 25,
+              // backgroundColor: focused ? 'rgba(0, 122, 255, 0.1)' : 'transparent',
+              marginBottom: focused ? 4 : 0,
+            }}>
+              <Ionicons name={iconName} size={focused ? 26 : 22} color={color} />
+            </View>
+          );
         },
         tabBarActiveTintColor: '#007AFF',
-        tabBarInactiveTintColor: 'gray',
+        tabBarInactiveTintColor: '#9CA3AF',
         tabBarStyle: {
-          backgroundColor: '#fff',
-          paddingTop: 10,
-          marginTop: 0,
+          position: 'absolute',
+          bottom: 25,
+          left: 20,
+          right: 20,
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          borderRadius: 25,
+          height: 70,
+          paddingBottom: 0,
+          paddingTop: 0,
+          borderTopWidth: 0,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 10 },
+          shadowOpacity: 0.15,
+          shadowRadius: 20,
+          elevation: 15,
+          backdropFilter: 'blur(20px)',
         },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          marginTop: -8,
+          marginBottom: 8,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 8,
+          borderRadius: 20,
+          marginHorizontal: 4,
+        },
+        tabBarBackground: () => (
+          <View style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            borderRadius: 25,
+            borderWidth: 1,
+            borderColor: 'rgba(255, 255, 255, 0.2)',
+          }} />
+        ),
       })}
     >
       <Tab.Screen name="Home" component={TransporterDashboardScreen} options={{ title: 'Home' }} />
-      <Tab.Screen name="MyRoutes" component={RoutesScreen} options={{ title: 'My Routes' }} />
-      <Tab.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Notifications' }} />
-      <Tab.Screen name="Account" component={SettingsScreen} options={{ title: 'Account' }} />
+      <Tab.Screen name="MyRoutes" component={RoutesScreen} options={{ title: 'Routes' }} />
+      <Tab.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Alerts' }} />
+      <Tab.Screen name="Account" component={SettingsScreen} options={{ title: 'Profile' }} />
     </Tab.Navigator>
   );
 }
@@ -132,35 +200,84 @@ function AdminTabsNavigator() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarIcon: ({ color, size }) => {
+        tabBarIcon: ({ color, size, focused }) => {
           let iconName;
           if (route.name === 'Home') {
-            iconName = 'home-outline';
+            iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'Shipments') {
-            iconName = 'list-outline';
+            iconName = focused ? 'list' : 'list-outline';
           } else if (route.name === 'Analytics') {
-            iconName = 'analytics-outline';
+            iconName = focused ? 'analytics' : 'analytics-outline';
           } else if (route.name === 'Announcements') {
-            iconName = 'megaphone-outline';
+            iconName = focused ? 'megaphone' : 'megaphone-outline';
           } else if (route.name === 'Account') {
-            iconName = 'person-outline';
+            iconName = focused ? 'person' : 'person-outline';
           }
-          return <Ionicons name={iconName} size={size} color={color} />;
+          return (
+            <View style={{
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 50,
+              height: 50,
+              borderRadius: 25,
+              // backgroundColor: focused ? 'rgba(0, 122, 255, 0.1)' : 'transparent',
+              marginBottom: focused ? 4 : 0,
+            }}>
+              <Ionicons name={iconName} size={focused ? 26 : 22} color={color} />
+            </View>
+          );
         },
         tabBarActiveTintColor: '#007AFF',
-        tabBarInactiveTintColor: 'gray',
+        tabBarInactiveTintColor: '#9CA3AF',
         tabBarStyle: { 
-          backgroundColor: '#fff',
-          paddingTop: 10,
-          marginTop: 0,
+          position: 'absolute',
+          bottom: 25,
+          left: 20,
+          right: 20,
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          borderRadius: 25,
+          height: 70,
+          paddingBottom: 0,
+          paddingTop: 0,
+          borderTopWidth: 0,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 10 },
+          shadowOpacity: 0.15,
+          shadowRadius: 20,
+          elevation: 15,
+          backdropFilter: 'blur(20px)',
         },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          marginTop: -8,
+          marginBottom: 8,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 8,
+          borderRadius: 20,
+          marginHorizontal: 2,
+        },
+        tabBarBackground: () => (
+          <View style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            borderRadius: 25,
+            borderWidth: 1,
+            borderColor: 'rgba(255, 255, 255, 0.2)',
+          }} />
+        ),
       })}
     >
       <Tab.Screen name="Home" component={AdminDashboardScreen} options={{ title: 'Home' }} />
-      <Tab.Screen name="Shipments" component={ShipmentsScreen} options={{ title: 'Shipments' }} />
+      <Tab.Screen name="Shipments" component={ShipmentsScreen} options={{ title: 'Orders' }} />
       <Tab.Screen name="Analytics" component={AnalyticsScreen} options={{ title: 'Analytics' }} />
-      <Tab.Screen name="Announcements" component={AnnouncementsScreen} options={{ title: 'Announcements' }} />
-      <Tab.Screen name="Account" component={SettingsScreen} options={{ title: 'Account' }} />
+      <Tab.Screen name="Announcements" component={AnnouncementsScreen} options={{ title: 'News' }} />
+      <Tab.Screen name="Account" component={SettingsScreen} options={{ title: 'Profile' }} />
     </Tab.Navigator>
   );
 }
@@ -170,32 +287,81 @@ function DispatcherTabsNavigator() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarIcon: ({ color, size }) => {
+        tabBarIcon: ({ color, size, focused }) => {
           let iconName;
           if (route.name === 'Home') {
-            iconName = 'home-outline';
+            iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'Shipments') {
-            iconName = 'list-outline';
+            iconName = focused ? 'list' : 'list-outline';
           } else if (route.name === 'Analytics') {
-            iconName = 'analytics-outline';
+            iconName = focused ? 'analytics' : 'analytics-outline';
           } else if (route.name === 'Account') {
-            iconName = 'person-outline';
+            iconName = focused ? 'person' : 'person-outline';
           }
-          return <Ionicons name={iconName} size={size} color={color} />;
+          return (
+            <View style={{
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 50,
+              height: 50,
+              borderRadius: 25,
+              // backgroundColor: focused ? 'rgba(0, 122, 255, 0.1)' : 'transparent',
+              marginBottom: focused ? 4 : 0,
+            }}>
+              <Ionicons name={iconName} size={focused ? 26 : 22} color={color} />
+            </View>
+          );
         },
         tabBarActiveTintColor: '#007AFF',
-        tabBarInactiveTintColor: 'gray',
+        tabBarInactiveTintColor: '#9CA3AF',
         tabBarStyle: { 
-          backgroundColor: '#fff',
-          paddingTop: 10,
-          marginTop: 0,
+          position: 'absolute',
+          bottom: 25,
+          left: 20,
+          right: 20,
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          borderRadius: 25,
+          height: 70,
+          paddingBottom: 0,
+          paddingTop: 0,
+          borderTopWidth: 0,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 10 },
+          shadowOpacity: 0.15,
+          shadowRadius: 20,
+          elevation: 15,
+          backdropFilter: 'blur(20px)',
         },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          marginTop: -8,
+          marginBottom: 8,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 8,
+          borderRadius: 20,
+          marginHorizontal: 4,
+        },
+        tabBarBackground: () => (
+          <View style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            borderRadius: 25,
+            borderWidth: 1,
+            borderColor: 'rgba(255, 255, 255, 0.2)',
+          }} />
+        ),
       })}
     >
       <Tab.Screen name="Home" component={DispatcherDashboardScreen} options={{ title: 'Home' }} />
-      <Tab.Screen name="Shipments" component={ShipmentsScreen} options={{ title: 'Shipments' }} />
+      <Tab.Screen name="Shipments" component={ShipmentsScreen} options={{ title: 'Orders' }} />
       <Tab.Screen name="Analytics" component={AnalyticsScreen} options={{ title: 'Analytics' }} />
-      <Tab.Screen name="Account" component={SettingsScreen} options={{ title: 'Account' }} />
+      <Tab.Screen name="Account" component={SettingsScreen} options={{ title: 'Profile' }} />
     </Tab.Navigator>
   );
 }
@@ -205,28 +371,81 @@ function ClientTabsNavigator() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarIcon: ({ color, size }) => {
+        tabBarIcon: ({ color, size, focused }) => {
           let iconName;
           if (route.name === 'Home') {
-            iconName = 'home-outline';
+            iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'MyShipments') {
-            iconName = 'list-outline';
+            iconName = focused ? 'list' : 'list-outline';
           } else if (route.name === 'TrackShipment') {
-            iconName = 'map';
+            iconName = focused ? 'map' : 'map-outline';
           } else if (route.name === 'Account') {
-            iconName = 'person-outline';
+            iconName = focused ? 'person' : 'person-outline';
           }
-          return <Ionicons name={iconName} size={size} color={color} />;
+          return (
+            <View style={{
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 50,
+              height: 50,
+              borderRadius: 25,
+              // backgroundColor: focused ? 'rgba(0, 122, 255, 0.1)' : 'transparent',
+              marginBottom: focused ? 4 : 0,
+            }}>
+              <Ionicons name={iconName} size={focused ? 26 : 22} color={color} />
+            </View>
+          );
         },
         tabBarActiveTintColor: '#007AFF',
-        tabBarInactiveTintColor: 'gray',
-        tabBarStyle: { backgroundColor: '#fff', paddingTop: 10, marginTop: 0 },
+        tabBarInactiveTintColor: '#9CA3AF',
+        tabBarStyle: { 
+          position: 'absolute',
+          bottom: 25,
+          left: 20,
+          right: 20,
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          borderRadius: 25,
+          height: 70,
+          paddingBottom: 0,
+          paddingTop: 0,
+          borderTopWidth: 0,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 10 },
+          shadowOpacity: 0.15,
+          shadowRadius: 20,
+          elevation: 15,
+          backdropFilter: 'blur(20px)',
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          marginTop: -8,
+          marginBottom: 8,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 8,
+          borderRadius: 20,
+          marginHorizontal: 4,
+        },
+        tabBarBackground: () => (
+          <View style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            borderRadius: 25,
+            borderWidth: 1,
+            borderColor: 'rgba(255, 255, 255, 0.2)',
+          }} />
+        ),
       })}
     >
       <Tab.Screen name="Home" component={DashboardScreen} options={{ title: 'Home' }} />
-      <Tab.Screen name="MyShipments" component={MyShipmentsScreen} options={{ title: 'My Shipments' }} />
-      <Tab.Screen name="TrackShipment" component={ShipmentTrackingScreen} options={{ title: 'Track Shipment' }} />
-      <Tab.Screen name="Account" component={SettingsScreen} options={{ title: 'Account' }} />
+      <Tab.Screen name="MyShipments" component={MyShipmentsScreen} options={{ title: 'Orders' }} />
+      <Tab.Screen name="TrackShipment" component={ShipmentTrackingScreen} options={{ title: 'Track' }} />
+      <Tab.Screen name="Account" component={SettingsScreen} options={{ title: 'Profile' }} />
     </Tab.Navigator>
   );
 }
@@ -236,28 +455,81 @@ function WarehouseAdminTabsNavigator() {
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarIcon: ({ color, size }) => {
+        tabBarIcon: ({ color, size, focused }) => {
           let iconName;
           if (route.name === 'Home') {
-            iconName = 'home-outline';
+            iconName = focused ? 'home' : 'home-outline';
           } else if (route.name === 'Inventory') {
-            iconName = 'cube-outline';
+            iconName = focused ? 'cube' : 'cube-outline';
           } else if (route.name === 'Analytics') {
-            iconName = 'analytics-outline';
+            iconName = focused ? 'analytics' : 'analytics-outline';
           } else if (route.name === 'Account') {
-            iconName = 'person-outline';
+            iconName = focused ? 'person' : 'person-outline';
           }
-          return <Ionicons name={iconName} size={size} color={color} />;
+          return (
+            <View style={{
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 50,
+              height: 50,
+              borderRadius: 25,
+              // backgroundColor: focused ? 'rgba(0, 122, 255, 0.1)' : 'transparent',
+              marginBottom: focused ? 4 : 0,
+            }}>
+              <Ionicons name={iconName} size={focused ? 26 : 22} color={color} />
+            </View>
+          );
         },
         tabBarActiveTintColor: '#007AFF',
-        tabBarInactiveTintColor: 'gray',
-        tabBarStyle: { backgroundColor: '#fff', paddingTop: 10, marginTop: 0 },
+        tabBarInactiveTintColor: '#9CA3AF',
+        tabBarStyle: { 
+          position: 'absolute',
+          bottom: 25,
+          left: 20,
+          right: 20,
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          borderRadius: 25,
+          height: 70,
+          paddingBottom: 0,
+          paddingTop: 0,
+          borderTopWidth: 0,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 10 },
+          shadowOpacity: 0.15,
+          shadowRadius: 20,
+          elevation: 15,
+          backdropFilter: 'blur(20px)',
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          marginTop: -8,
+          marginBottom: 8,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 8,
+          borderRadius: 20,
+          marginHorizontal: 4,
+        },
+        tabBarBackground: () => (
+          <View style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            borderRadius: 25,
+            borderWidth: 1,
+            borderColor: 'rgba(255, 255, 255, 0.2)',
+          }} />
+        ),
       })}
     >
       <Tab.Screen name="Home" component={WarehouseAdminDashboardScreen} options={{ title: 'Home' }} />
-      <Tab.Screen name="Inventory" component={WarehouseInventoryScreen} options={{ title: 'Inventory' }} />
+      <Tab.Screen name="Inventory" component={WarehouseInventoryScreen} options={{ title: 'Stock' }} />
       <Tab.Screen name="Analytics" component={WarehouseAnalyticsScreen} options={{ title: 'Analytics' }} />
-      <Tab.Screen name="Account" component={SettingsScreen} options={{ title: 'Account' }} />
+      <Tab.Screen name="Account" component={SettingsScreen} options={{ title: 'Profile' }} />
     </Tab.Navigator>
   );
 }
@@ -320,6 +592,9 @@ function DrawerNavigator() {
       {['admin','dev','warehouse_admin'].includes(user?.role) && <Drawer.Screen name="Locations" component={LocationsScreen} options={{ title: 'Locations' }} />}
       {['admin','dev','warehouse_admin'].includes(user?.role) && <Drawer.Screen name="SKU Attributes" component={SKUAttributesScreen} options={{ title: 'SKU Attributes' }} />}
       {['admin','dev','warehouse_admin'].includes(user?.role) && <Drawer.Screen name="Transfer Stocks" component={CreateTransferOrderScreen} options={{ title: 'Transfer Stocks' }} />}
+      {['admin','dev','warehouse_admin'].includes(user?.role) && <Drawer.Screen name="Wave Management" component={WaveManagementScreen} options={{ title: 'Wave Management' }} />}
+      {['admin','dev','warehouse_admin'].includes(user?.role) && <Drawer.Screen name="Pick Lists" component={PickListScreen} options={{ title: 'Pick Lists' }} />}
+      {['admin','dev','warehouse_admin'].includes(user?.role) && <Drawer.Screen name="Cycle Count Management" component={CycleCountManagementScreen} options={{ title: 'Cycle Counting' }} />}
       {['admin','dispatcher'].includes(user?.role) && <Drawer.Screen name="Drivers" component={DriversScreen} options={{ title: 'Drivers' }} />}
     </Drawer.Navigator>
   );
@@ -414,6 +689,29 @@ function AppNavigator() {
       <MainStack.Screen name="Incident Reports" component={DamageReportsScreen} options={{ title: 'Incident Reports' }} />
       <MainStack.Screen name="Warehouse3DView" component={Warehouse3DView} options={{ title: '3D Warehouse View' }} />
       <MainStack.Screen name="Warehouse3DHeatmapView" component={Warehouse3DHeatmapView} options={{ title: '3D Warehouse Heatmap' }} />
+      <MainStack.Screen name="Conversations" component={ConversationListScreen} options={{ title: 'Conversations'}} />
+      <MainStack.Screen name="NewConversation" component={NewConversationScreen} options={{ title: 'New Conversation'}} />
+      <MainStack.Screen name="Chat" component={ChatScreen} options={({ route }) => ({ title: route.params?.name || 'Chat'})} />
+      <MainStack.Screen name="GroupInfo" component={GroupInfoScreen} options={{ title: 'Group Info'}} />
+      <MainStack.Screen name="Feature Management" component={FeatureManagementScreen} options={{ title: 'Feature Management' }} />
+      <MainStack.Screen name="Wave Management" component={WaveManagementScreen} options={{ title: 'Wave Management' }} />
+      <MainStack.Screen name="Pick Lists" component={PickListScreen} options={{ title: 'Pick Lists' }} />
+      
+      {/* Phase 3: Receiving & Put-Away Management Screens */}
+      <MainStack.Screen name="ASNManagement" component={ASNManagementScreen} options={{ title: 'ASN Management' }} />
+      <MainStack.Screen name="ReceivingManagement" component={ReceivingManagementScreen} options={{ title: 'Receiving Management' }} />
+      <MainStack.Screen name="PutAwayManagement" component={PutAwayManagementScreen} options={{ title: 'Put-Away Management' }} />
+      <MainStack.Screen name="DockManagement" component={DockManagementScreen} options={{ title: 'Dock Management' }} />
+      <MainStack.Screen name="DockDoorDetails" component={DockDoorDetailsScreen} options={{ title: 'Dock Door Details' }} />
+      <MainStack.Screen name="AppointmentScheduling" component={AppointmentSchedulingScreen} options={{ title: 'Appointments' }} />
+      <MainStack.Screen name="AppointmentDetails" component={AppointmentDetailsScreen} options={{ title: 'Appointment Details' }} />
+      <MainStack.Screen name="CrossDockManagement" component={CrossDockManagementScreen} options={{ title: 'Cross-Docking' }} />
+      
+      {/* Cycle Counting System Screens */}
+      <MainStack.Screen name="CycleCountManagement" component={CycleCountManagementScreen} options={{ title: 'Cycle Count Management' }} />
+      <MainStack.Screen name="CycleCountDetails" component={CycleCountDetailsScreen} options={{ title: 'Cycle Count Details' }} />
+      <MainStack.Screen name="CreateCycleCount" component={CreateCycleCountScreen} options={{ title: 'Create Cycle Count' }} />
+      <MainStack.Screen name="MobileCycleCount" component={MobileCycleCountScreen} options={{ title: 'Cycle Counting' }} />
     </MainStack.Navigator>
   );
 }

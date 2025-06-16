@@ -1,10 +1,11 @@
 import React, { useRef, useEffect, useState, useContext } from 'react';
-import { View, StyleSheet, ActivityIndicator, Dimensions, PanResponder, Modal, Text, ScrollView, KeyboardAvoidingView, Platform, SafeAreaView, Animated } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Dimensions, PanResponder, Modal, Text, ScrollView, KeyboardAvoidingView, Platform, SafeAreaView, Animated, TouchableOpacity, Alert } from 'react-native';
 import { GLView } from 'expo-gl';
 import * as THREE from 'three';
 import { Renderer } from 'expo-three';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Text as RNText } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
 import { fetchWarehouseItems } from '../api/warehouseItems';
@@ -98,6 +99,7 @@ export default function Warehouse3DHeatmapView() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [selectedTab, setSelectedTab] = useState('bin');
   const [activeHeatmap, setActiveHeatmap] = useState(null);
+  const [showInfoModal, setShowInfoModal] = useState(false);
   const { userToken } = useContext(AuthContext);
   const [warehouseItemsMap, setWarehouseItemsMap] = useState({ idMap: {}, labelMap: {} });
   const warehouseItemsMapRef = useRef(warehouseItemsMap);
@@ -146,6 +148,57 @@ export default function Warehouse3DHeatmapView() {
     }
     loadWarehouseItems();
   }, [userToken]);
+
+  // Control Functions
+  const resetCameraView = () => {
+    // Reset to a nice default camera position
+    cameraStateRef.current = { 
+      radius: 15, 
+      theta: Math.PI / 3, 
+      phi: Math.PI / 4 
+    };
+    cameraTargetRef.current = { x: 0, y: 0, z: 0 };
+    
+    // Show feedback
+    Alert.alert('Camera Reset', 'View has been reset to default position', [{ text: 'OK' }]);
+  };
+
+  const fitToScreen = () => {
+    if (!sceneRef.current || !cameraRef.current || objectsRef.current.length === 0) {
+      Alert.alert('No Objects', 'No warehouse objects to fit in view', [{ text: 'OK' }]);
+      return;
+    }
+    
+    // Calculate bounding box of all objects
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    let minZ = Infinity, maxZ = -Infinity;
+    
+    objectsRef.current.forEach(obj => {
+      const { position, size } = obj;
+      minX = Math.min(minX, position.x - size.x/2);
+      maxX = Math.max(maxX, position.x + size.x/2);
+      minY = Math.min(minY, position.y - size.y/2);
+      maxY = Math.max(maxY, position.y + size.y/2);
+      minZ = Math.min(minZ, position.z - size.z/2);
+      maxZ = Math.max(maxZ, position.z + size.z/2);
+    });
+    
+    // Calculate center and size
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const centerZ = (minZ + maxZ) / 2;
+    const sizeX = maxX - minX;
+    const sizeZ = maxZ - minZ;
+    const maxSize = Math.max(sizeX, sizeZ);
+    
+    // Set camera to fit the scene
+    cameraTargetRef.current = { x: centerX, y: centerY, z: centerZ };
+    cameraStateRef.current.radius = maxSize * 1.5; // Add some padding
+    
+    // Show feedback
+    Alert.alert('View Adjusted', 'Camera positioned to fit all warehouse objects', [{ text: 'OK' }]);
+  };
 
   const panResponder = useRef(
     PanResponder.create({
@@ -369,10 +422,20 @@ export default function Warehouse3DHeatmapView() {
           } else if (activeHeatmapRef.current === 'binCapacity' && obj.type === 'bin') {
             // Composite match by bin label and its containing shelf, aisle, and zone
             const itemsList = warehouseItemsListRef.current;
-            // Find parent shelf, aisle, zone based on positions
-            const shelfObj = objectsRef.current.find(o => o.type === 'shelf'
-              && Math.abs(o.position.x - obj.position.x) <= o.size.x / 2
-              && Math.abs(o.position.z - obj.position.z) <= o.size.z / 2);
+            // Identify the topmost shelf under the bin with stacking support
+            const binBottomY = obj.position.y - obj.size.y / 2;
+            const shelfCandidates = objectsRef.current.filter(o => o.type === 'shelf' &&
+              Math.abs(o.position.x - obj.position.x) <= (o.size.x / 2 + obj.size.x / 2) &&
+              Math.abs(o.position.z - obj.position.z) <= (o.size.z / 2 + obj.size.z / 2) &&
+              (o.position.y + o.size.y / 2) <= binBottomY + 0.001
+            );
+            const shelfObj = shelfCandidates.length > 0
+              ? shelfCandidates.reduce((prev, curr) => {
+                  const prevTop = prev.position.y + prev.size.y / 2;
+                  const currTop = curr.position.y + curr.size.y / 2;
+                  return currTop > prevTop ? curr : prev;
+                }, shelfCandidates[0])
+              : undefined;
             const aisleObj = objectsRef.current.find(o => o.type === 'aisle'
               && Math.abs(o.position.x - obj.position.x) <= o.size.x / 2
               && Math.abs(o.position.z - obj.position.z) <= o.size.z / 2);
@@ -421,14 +484,46 @@ export default function Warehouse3DHeatmapView() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007aff" />
-      </View>
+      <LinearGradient 
+        colors={['#1a1a1a', '#2d2d2d']} 
+        style={styles.loadingContainer}
+      >
+        <View style={styles.loadingContent}>
+          <MaterialCommunityIcons name="view-grid-plus" size={64} color="#007AFF" />
+          <ActivityIndicator size="large" color="#007AFF" style={styles.loadingSpinner} />
+          <Text style={styles.loadingTitle}>Loading 3D Heatmap</Text>
+          <Text style={styles.loadingSubtitle}>Preparing warehouse visualization...</Text>
+        </View>
+      </LinearGradient>
     );
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={styles.container}>
+      {/* Header */}
+      <LinearGradient
+        colors={['rgba(0,0,0,0.8)', 'transparent']}
+        style={styles.header}
+      >
+        <SafeAreaView style={styles.headerContent}>
+          <View style={styles.headerLeft}>
+            <MaterialCommunityIcons name="view-grid-plus" size={24} color="white" />
+            <Text style={styles.headerTitle}>3D Heatmap</Text>
+          </View>
+          <View style={styles.headerRight}>
+            {activeHeatmap && (
+              <View style={styles.heatmapIndicator}>
+                <MaterialCommunityIcons name="circle" size={8} color="#34C759" />
+                <Text style={styles.heatmapIndicatorText}>
+                  {activeHeatmap === 'binCapacity' ? 'Bin Capacity' : 'Rack Weight'}
+                </Text>
+              </View>
+            )}
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+
+      {/* 3D View */}
       <GLView
         style={styles.glview}
         onContextCreate={onContextCreate}
@@ -438,7 +533,58 @@ export default function Warehouse3DHeatmapView() {
         }}
         {...panResponder.panHandlers}
       />
-      {/* Properties Panel Modal (read-only) */}
+      
+      {/* Floating Controls */}
+      <View style={styles.floatingControls}>
+        <TouchableOpacity 
+          style={styles.controlButton} 
+          activeOpacity={0.8}
+          onPress={resetCameraView}
+        >
+          <MaterialCommunityIcons name="rotate-3d-variant" size={20} color="#007AFF" />
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.controlButton} 
+          activeOpacity={0.8}
+          onPress={fitToScreen}
+        >
+          <MaterialCommunityIcons name="fit-to-screen" size={20} color="#007AFF" />
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.controlButton} 
+          activeOpacity={0.8}
+          onPress={() => setShowInfoModal(true)}
+        >
+          <MaterialCommunityIcons name="information-outline" size={20} color="#007AFF" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Heatmap Color Legend */}
+      {activeHeatmap && (
+        <View style={styles.legendContainer}>
+          <View style={styles.legendHeader}>
+            <MaterialCommunityIcons name="palette" size={16} color="#007AFF" />
+            <Text style={styles.legendTitle}>
+              {activeHeatmap === 'binCapacity' ? 'Capacity' : 'Weight'}
+            </Text>
+          </View>
+          <View style={styles.legendContent}>
+            <View style={styles.legendRow}>
+              <View style={[styles.legendColor, { backgroundColor: '#34C759' }]} />
+              <Text style={styles.legendText}>Low</Text>
+            </View>
+            <View style={styles.legendRow}>
+              <View style={[styles.legendColor, { backgroundColor: '#FFD60A' }]} />
+              <Text style={styles.legendText}>Medium</Text>
+            </View>
+            <View style={styles.legendRow}>
+              <View style={[styles.legendColor, { backgroundColor: '#FF453A' }]} />
+              <Text style={styles.legendText}>High</Text>
+            </View>
+          </View>
+        </View>
+      )}
+      {/* Enhanced Properties Panel Modal */}
       <Modal
         visible={showProperties}
         animationType="slide"
@@ -451,33 +597,63 @@ export default function Warehouse3DHeatmapView() {
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
           >
-            <ScrollView style={{ paddingBottom: 30 }}>
-              <Text style={styles.modalTitle}>Component Properties</Text>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderLeft}>
+                <MaterialCommunityIcons name="information-outline" size={24} color="#007AFF" />
+                <Text style={styles.modalTitle}>Component Details</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.modalCloseButton}
+                onPress={() => setShowProperties(false)}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="close" size={20} color="#8E8E93" />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
               {(() => {
                 const obj = objects.find(o => o.id === selectedId);
-                if (!obj) return null;
-                return (
-                  <>
-                    <Text style={styles.modalLabel}>ID</Text>
-                    <Text style={styles.modalValue}>{obj.id}</Text>
-                    <Text style={styles.modalLabel}>Type</Text>
-                    <Text style={styles.modalValue}>{obj.type}</Text>
-                    <Text style={styles.modalLabel}>Label</Text>
-                    <Text style={styles.modalValue}>{obj.label}</Text>
-                    <Text style={styles.modalLabel}>Size (x, y, z)</Text>
-                    <Text style={styles.modalValue}>{`${obj.size.x}, ${obj.size.y}, ${obj.size.z}`}</Text>
-                    <Text style={styles.modalLabel}>Color (hex)</Text>
-                    <Text style={styles.modalValue}>{typeof obj.color === 'number' ? `#${obj.color.toString(16).padStart(6, '0')}` : obj.color}</Text>
+                                  if (!obj) return null;
+                  return (
+                    <View style={styles.propertyContainer}>
+                      <View style={styles.propertyItem}>
+                        <Text style={styles.modalLabel}>Type</Text>
+                        <View style={styles.propertyValueContainer}>
+                          <MaterialCommunityIcons 
+                            name={obj.type === 'bin' ? 'package-variant' : 'cube-outline'} 
+                            size={16} 
+                            color="#007AFF" 
+                          />
+                          <Text style={styles.modalValue}>{obj.type}</Text>
+                        </View>
+                      </View>
+                      
+                      <View style={styles.propertyItem}>
+                        <Text style={styles.modalLabel}>Label</Text>
+                        <Text style={styles.modalValue}>{obj.label}</Text>
+                      </View>
                     {/* Show bin capacity details if this is a bin */}
                     {obj.type === 'bin' && (() => {
                       // Find parent shelf, aisle, zone in layout
-                      const shelfObj = objects.find(o => o.type === 'shelf'
+                      // Identify the topmost shelf under the bin with stacking support
+                      const binBottomY = obj.position.y - obj.size.y / 2;
+                      const shelfCandidates = objectsRef.current.filter(o => o.type === 'shelf' &&
+                        Math.abs(o.position.x - obj.position.x) <= (o.size.x / 2 + obj.size.x / 2) &&
+                        Math.abs(o.position.z - obj.position.z) <= (o.size.z / 2 + obj.size.z / 2) &&
+                        (o.position.y + o.size.y / 2) <= binBottomY + 0.001
+                      );
+                      const shelfObj = shelfCandidates.length > 0
+                        ? shelfCandidates.reduce((prev, curr) => {
+                            const prevTop = prev.position.y + prev.size.y / 2;
+                            const currTop = curr.position.y + curr.size.y / 2;
+                            return currTop > prevTop ? curr : prev;
+                          }, shelfCandidates[0])
+                        : undefined;
+                      const aisleObj = objectsRef.current.find(o => o.type === 'aisle'
                         && Math.abs(o.position.x - obj.position.x) <= o.size.x / 2
                         && Math.abs(o.position.z - obj.position.z) <= o.size.z / 2);
-                      const aisleObj = objects.find(o => o.type === 'aisle'
-                        && Math.abs(o.position.x - obj.position.x) <= o.size.x / 2
-                        && Math.abs(o.position.z - obj.position.z) <= o.size.z / 2);
-                      const zoneObj = objects.find(o => o.type === 'zone'
+                      const zoneObj = objectsRef.current.find(o => o.type === 'zone'
                         && Math.abs(o.position.x - obj.position.x) <= o.size.x / 2
                         && Math.abs(o.position.z - obj.position.z) <= o.size.z / 2);
                       const shelfLabel = shelfObj?.label;
@@ -496,205 +672,685 @@ export default function Warehouse3DHeatmapView() {
                       const pctUsed = (heatmapItem.quantity / heatmapItem.maxThreshold) * 100;
                       return (
                         <>
-                          <Text style={styles.modalLabel}>Quantity</Text>
-                          <Text style={styles.modalValue}>{heatmapItem.quantity}</Text>
-                          <Text style={styles.modalLabel}>Capacity</Text>
-                          <Text style={styles.modalValue}>{heatmapItem.maxThreshold}</Text>
-                          <Text style={styles.modalLabel}>Utilization (%)</Text>
-                          <Text style={styles.modalValue}>{`${pctUsed.toFixed(1)}%`}</Text>
+                          <View style={styles.propertyItem}>
+                            <Text style={styles.modalLabel}>Item</Text>
+                            <View style={styles.propertyValueContainer}>
+                              <MaterialCommunityIcons name="package-variant-closed" size={16} color="#007AFF" />
+                              <Text style={styles.modalValue}>{heatmapItem.InventoryItem.name}</Text>
+                            </View>
+                          </View>
+                          
+                          <View style={styles.propertyItem}>
+                            <Text style={styles.modalLabel}>Current Stock</Text>
+                            <View style={styles.propertyValueContainer}>
+                              <MaterialCommunityIcons name="counter" size={16} color="#34C759" />
+                              <Text style={styles.modalValue}>{heatmapItem.quantity}</Text>
+                            </View>
+                          </View>
+                          
+                          <View style={styles.propertyItem}>
+                            <Text style={styles.modalLabel}>Max Capacity</Text>
+                            <View style={styles.propertyValueContainer}>
+                              <MaterialCommunityIcons name="gauge-full" size={16} color="#8E8E93" />
+                              <Text style={styles.modalValue}>{heatmapItem.maxThreshold}</Text>
+                            </View>
+                          </View>
+                          
+                          <View style={styles.propertyItem}>
+                            <Text style={styles.modalLabel}>Utilization</Text>
+                            <View style={styles.utilizationContainer}>
+                              <View style={styles.utilizationBar}>
+                                <View style={[
+                                  styles.utilizationFill, 
+                                  { 
+                                    width: `${Math.min(pctUsed, 100)}%`,
+                                    backgroundColor: pctUsed > 80 ? '#FF453A' : pctUsed > 50 ? '#FFD60A' : '#34C759'
+                                  }
+                                ]} />
+                              </View>
+                              <Text style={[styles.modalValue, { 
+                                color: pctUsed > 80 ? '#FF453A' : '#1C1C1E',
+                                fontWeight: '600'
+                              }]}>
+                                {`${pctUsed.toFixed(1)}%`}
+                              </Text>
+                            </View>
+                          </View>
                         </>
                       );
                     })()}
-                  </>
-                );
-              })()}
-              <View style={{ height: 16 }} />
-              <View style={{ alignItems: 'center' }}>
-                <Text style={{ color: '#007aff', fontWeight: 'bold', fontSize: 16 }} onPress={() => setShowProperties(false)}>
-                  Close
-                </Text>
-              </View>
+                    </View>
+                  );
+                })()}
             </ScrollView>
+            
+            <View style={styles.modalFooter}>
+              <TouchableOpacity 
+                style={styles.modalButton}
+                onPress={() => setShowProperties(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalButtonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
           </KeyboardAvoidingView>
         </View>
       </Modal>
-      {/* Slide-out menu and sliding button */}
-      <Animated.View style={[styles.animatedMenuContainer, { transform: [{ translateX: slideAnim }], width: menuWidth, position: 'absolute', right: 0, top: 0, bottom: 0, zIndex: 20 }]}> 
-        <SafeAreaView style={styles.slideMenuContainer} edges={['top', 'right']}>
-          <View style={styles.tabBar}>
-            <Text
-              style={[styles.tab, selectedTab === 'bin' && styles.tabSelected]}
-              onPress={() => setSelectedTab('bin')}
-            >Bin Heatmaps</Text>
-            <Text
-              style={[styles.tab, selectedTab === 'rack' && styles.tabSelected]}
-              onPress={() => setSelectedTab('rack')}
-            >Rack Heatmaps</Text>
+
+      {/* Information Modal */}
+      <Modal
+        visible={showInfoModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowInfoModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.infoModalContent}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderLeft}>
+                <MaterialCommunityIcons name="help-circle-outline" size={24} color="#007AFF" />
+                <Text style={styles.modalTitle}>3D Controls Guide</Text>
+              </View>
+              <TouchableOpacity 
+                style={styles.modalCloseButton}
+                onPress={() => setShowInfoModal(false)}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="close" size={20} color="#8E8E93" />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.infoModalBody} showsVerticalScrollIndicator={false}>
+              <View style={styles.infoSection}>
+                <Text style={styles.infoSectionTitle}>Navigation</Text>
+                <View style={styles.infoItem}>
+                  <MaterialCommunityIcons name="gesture-tap" size={20} color="#007AFF" />
+                  <Text style={styles.infoText}>Tap objects to view details</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <MaterialCommunityIcons name="gesture-swipe" size={20} color="#007AFF" />
+                  <Text style={styles.infoText}>Drag to rotate the view</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <MaterialCommunityIcons name="gesture-pinch" size={20} color="#007AFF" />
+                  <Text style={styles.infoText}>Pinch to zoom in/out</Text>
+                </View>
+              </View>
+              
+              <View style={styles.infoSection}>
+                <Text style={styles.infoSectionTitle}>Controls</Text>
+                <View style={styles.infoItem}>
+                  <MaterialCommunityIcons name="rotate-3d-variant" size={20} color="#007AFF" />
+                  <Text style={styles.infoText}>Reset camera to default view</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <MaterialCommunityIcons name="fit-to-screen" size={20} color="#007AFF" />
+                  <Text style={styles.infoText}>Fit all objects in view</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <MaterialCommunityIcons name="menu" size={20} color="#007AFF" />
+                  <Text style={styles.infoText}>Open heatmap layers menu</Text>
+                </View>
+              </View>
+              
+              <View style={styles.infoSection}>
+                <Text style={styles.infoSectionTitle}>Heatmap Colors</Text>
+                <View style={styles.infoItem}>
+                  <View style={[styles.colorIndicator, { backgroundColor: '#34C759' }]} />
+                  <Text style={styles.infoText}>Low utilization (0-50%)</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <View style={[styles.colorIndicator, { backgroundColor: '#FFD60A' }]} />
+                  <Text style={styles.infoText}>Medium utilization (50-80%)</Text>
+                </View>
+                <View style={styles.infoItem}>
+                  <View style={[styles.colorIndicator, { backgroundColor: '#FF453A' }]} />
+                  <Text style={styles.infoText}>High utilization (80%+)</Text>
+                </View>
+              </View>
+            </ScrollView>
+            
+            <View style={styles.modalFooter}>
+              <TouchableOpacity 
+                style={styles.modalButton}
+                onPress={() => setShowInfoModal(false)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalButtonText}>Got it!</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-            {selectedTab === 'bin' ? (
-              <View style={styles.menuSection}>
-                <Text
-                  style={[styles.menuButton, activeHeatmap === 'binCapacity' && styles.menuButtonActive]}
-                  onPress={() => {
-                    console.log('Bin Capacity clicked');
-                    setActiveHeatmap('binCapacity');
-                  }}
-                >Bin Capacity</Text>
-              </View>
-            ) : (
-              <View style={styles.menuSection}>
-                <Text
-                  style={[styles.menuButton, activeHeatmap === 'rackWeightCapacity' && styles.menuButtonActive]}
-                  onPress={() => {
-                    console.log('Rack Weight Capacity clicked');
-                    setActiveHeatmap('rackWeightCapacity');
-                  }}
-                >Rack Weight Capacity</Text>
-              </View>
-            )}
-          </ScrollView>
-        </SafeAreaView>
+        </View>
+      </Modal>
+      {/* Enhanced Slide-out Menu */}
+      <Animated.View style={[styles.animatedMenuContainer, { transform: [{ translateX: slideAnim }], width: menuWidth, position: 'absolute', right: 0, top: 0, bottom: 0, zIndex: 20 }]}> 
+        <LinearGradient
+          colors={['#FFFFFF', '#F8F9FA']}
+          style={styles.slideMenuContainer}
+        >
+          <SafeAreaView style={styles.safeMenuArea} edges={['top', 'right']}>
+            <View style={styles.menuHeader}>
+              <MaterialCommunityIcons name="layers-triple" size={24} color="#007AFF" />
+              <Text style={styles.menuHeaderTitle}>Heatmap Layers</Text>
+            </View>
+            
+            <View style={styles.tabBar}>
+              <TouchableOpacity
+                style={[styles.tab, selectedTab === 'bin' && styles.tabSelected]}
+                onPress={() => setSelectedTab('bin')}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="package-variant" size={16} color={selectedTab === 'bin' ? '#007AFF' : '#8E8E93'} />
+                <Text style={[styles.tabText, selectedTab === 'bin' && styles.tabTextSelected]}>
+                  Bins
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.tab, selectedTab === 'rack' && styles.tabSelected]}
+                onPress={() => setSelectedTab('rack')}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="shelf" size={16} color={selectedTab === 'rack' ? '#007AFF' : '#8E8E93'} />
+                <Text style={[styles.tabText, selectedTab === 'rack' && styles.tabTextSelected]}>
+                  Racks
+                </Text>
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.menuContent} showsVerticalScrollIndicator={false}>
+              {selectedTab === 'bin' ? (
+                <View style={styles.menuSection}>
+                  <TouchableOpacity
+                    style={[styles.menuButton, activeHeatmap === 'binCapacity' && styles.menuButtonActive]}
+                    onPress={() => {
+                      console.log('Bin Capacity clicked');
+                      setActiveHeatmap('binCapacity');
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialCommunityIcons 
+                      name="gauge" 
+                      size={20} 
+                      color={activeHeatmap === 'binCapacity' ? '#007AFF' : '#8E8E93'} 
+                    />
+                    <Text style={[styles.menuButtonText, activeHeatmap === 'binCapacity' && styles.menuButtonTextActive]}>
+                      Bin Capacity
+                    </Text>
+                    {activeHeatmap === 'binCapacity' && (
+                      <MaterialCommunityIcons name="check-circle" size={16} color="#34C759" />
+                    )}
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.menuSection}>
+                  <TouchableOpacity
+                    style={[styles.menuButton, activeHeatmap === 'rackWeightCapacity' && styles.menuButtonActive]}
+                    onPress={() => {
+                      console.log('Rack Weight Capacity clicked');
+                      setActiveHeatmap('rackWeightCapacity');
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialCommunityIcons 
+                      name="weight" 
+                      size={20} 
+                      color={activeHeatmap === 'rackWeightCapacity' ? '#007AFF' : '#8E8E93'} 
+                    />
+                    <Text style={[styles.menuButtonText, activeHeatmap === 'rackWeightCapacity' && styles.menuButtonTextActive]}>
+                      Weight Capacity
+                    </Text>
+                    {activeHeatmap === 'rackWeightCapacity' && (
+                      <MaterialCommunityIcons name="check-circle" size={16} color="#34C759" />
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
+            </ScrollView>
+          </SafeAreaView>
+        </LinearGradient>
       </Animated.View>
+      
+      {/* Enhanced Menu Toggle Button */}
       <Animated.View style={[styles.openTabContainer, {
         right: slideAnim.interpolate({ inputRange: [0, menuWidth], outputRange: [menuWidth, 0] }),
-      }]}
-      >
-        <Ionicons
-          name={menuOpen ? 'chevron-forward' : 'chevron-back'}
-          size={32}
-          color="#222"
-          style={styles.openArrow}
+      }]}>
+        <TouchableOpacity
+          style={styles.menuToggleButton}
           onPress={() => setMenuOpen(!menuOpen)}
-        />
+          activeOpacity={0.8}
+        >
+          <MaterialCommunityIcons
+            name={menuOpen ? 'chevron-right' : 'menu'}
+            size={20}
+            color="#007AFF"
+          />
+        </TouchableOpacity>
       </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#222' },
-  glview: { flex: 1 },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#222' },
-  modalOverlay: {
+  // Main Container
+  container: { 
+    flex: 1, 
+    backgroundColor: '#1a1a1a',
+  },
+  glview: { 
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  
+  // Loading Screen
+  loadingContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+  },
+  loadingContent: {
+    alignItems: 'center',
+  },
+  loadingSpinner: {
+    marginTop: 20,
+    marginBottom: 16,
+  },
+  loadingTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: 'white',
+    marginBottom: 8,
+  },
+  loadingSubtitle: {
+    fontSize: 16,
+    color: '#8E8E93',
+    textAlign: 'center',
+  },
+
+  // Header
+  header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+    paddingBottom: 20,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    paddingTop: 16,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: 'white',
+    marginLeft: 12,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  heatmapIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  heatmapIndicatorText: {
+    fontSize: 12,
+    color: 'white',
+    marginLeft: 6,
+    fontWeight: '500',
+  },
+
+  // Floating Controls
+  floatingControls: {
+    position: 'absolute',
+    bottom: 100,
+    left: 20,
+    flexDirection: 'column',
+    zIndex: 15,
+  },
+  controlButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 12,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'flex-end',
   },
   modalContent: {
     backgroundColor: 'white',
-    padding: 20,
-    borderRadius: 20,
-    width: '80%',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     maxHeight: '80%',
+    minHeight: 300,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  modalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginLeft: 8,
+  },
+  modalCloseButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F2F2F7',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalBody: {
+    padding: 20,
+  },
+  propertyContainer: {
+    marginBottom: 20,
+  },
+  propertyItem: {
+    marginBottom: 16,
   },
   modalLabel: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 5,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8E8E93',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  propertyValueContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   modalValue: {
     fontSize: 16,
-    marginBottom: 10,
+    color: '#1C1C1E',
+    fontWeight: '500',
+    marginLeft: 8,
   },
+  utilizationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  utilizationBar: {
+    flex: 1,
+    height: 8,
+    backgroundColor: '#E5E5EA',
+    borderRadius: 4,
+    marginRight: 12,
+    overflow: 'hidden',
+  },
+  utilizationFill: {
+    height: '100%',
+    backgroundColor: '#34C759',
+    borderRadius: 4,
+  },
+  modalFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E5EA',
+  },
+  modalButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+  },
+
+  // Information Modal Styles
+  infoModalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '85%',
+    minHeight: 500,
+  },
+  infoModalBody: {
+    padding: 20,
+  },
+  infoSection: {
+    marginBottom: 24,
+  },
+  infoSectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 12,
+  },
+  infoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  infoText: {
+    fontSize: 16,
+    color: '#1C1C1E',
+    marginLeft: 12,
+    flex: 1,
+  },
+  colorIndicator: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+  },
+
+  // Slide-out Menu
   slideMenuContainer: {
     position: 'absolute',
     top: 0,
     bottom: 0,
-    width: 260,
-    backgroundColor: '#fff',
+    width: 280,
     zIndex: 20,
+    elevation: 10,
     shadowColor: '#000',
-    shadowOffset: { width: -2, height: 0 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
-    borderLeftWidth: 1,
-    borderLeftColor: '#fff2',
-    flexDirection: 'column',
-    alignItems: 'stretch',
-    transitionProperty: 'right',
-    transitionDuration: '300ms',
+    shadowOffset: { width: -4, height: 0 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+  },
+  safeMenuArea: {
+    flex: 1,
+  },
+  menuHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  menuHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginLeft: 12,
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: '#f5f5f5'
+    backgroundColor: '#F2F2F7',
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 12,
+    padding: 4,
   },
   tab: {
     flex: 1,
-    paddingVertical: 14,
-    textAlign: 'center',
-    color: '#000',
-    fontWeight: 'bold',
-    fontSize: 14,
-    backgroundColor: 'f5f5f5'
-  },
-  tabSelected: {
-    backgroundColor: '#f5f5f5',
-    color: '#000',
-    borderBottomWidth: 3,
-    borderBottomColor: '#ccc',
-  },
-  menuSection: {
-    padding: 24,
-  },
-  menuButton: {
-    backgroundColor: '#333',
-    color: '#fff',
-    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 8,
+  },
+  tabSelected: {
+    backgroundColor: 'white',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#8E8E93',
+    marginLeft: 6,
+  },
+  tabTextSelected: {
+    color: '#007AFF',
+    fontWeight: '600',
+  },
+  menuContent: {
+    flex: 1,
+    padding: 16,
+  },
+  menuSection: {
     marginBottom: 16,
-    textAlign: 'center',
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#fff2',
+  },
+  menuButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
   },
   menuButtonActive: {
-    backgroundColor: '#f5f5f5',
-    color: '#222',
-    borderColor: '#fff',
+    backgroundColor: '#F0F8FF',
+    borderColor: '#007AFF',
   },
+  menuButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1C1C1E',
+    marginLeft: 12,
+    flex: 1,
+  },
+  menuButtonTextActive: {
+    color: '#007AFF',
+    fontWeight: '600',
+  },
+
+  // Menu Toggle Button
   openTabContainer: {
     position: 'absolute',
     right: 0,
     top: '50%',
-    marginTop: -20,
-    width: 24,
-    height: 100,
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderBottomLeftRadius: 20,
+    marginTop: -24,
     zIndex: 19,
+  },
+  menuToggleButton: {
+    width: 48,
+    height: 48,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderTopLeftRadius: 24,
+    borderBottomLeftRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 10,
+    elevation: 6,
     shadowColor: '#000',
-    shadowOffset: { width: 2, height: 0 },
-    shadowOpacity: 0.2,
+    shadowOffset: { width: -2, height: 0 },
+    shadowOpacity: 0.15,
     shadowRadius: 8,
   },
-  openArrow: {
-    color: '#222',
-    fontSize: 28,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    textAlignVertical: 'center',
-    width: 24,
-    height: 28,
+
+  // Heatmap Legend
+  legendContainer: {
+    position: 'absolute',
+    bottom: 30,
+    right: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    minWidth: 120,
+    zIndex: 15,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
   },
+  legendHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  legendTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginLeft: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  legendContent: {
+    gap: 6,
+  },
+  legendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  legendColor: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  legendText: {
+    fontSize: 11,
+    color: '#1C1C1E',
+    fontWeight: '500',
+  },
+
+  // Animated Container
   animatedMenuContainer: {
     position: 'absolute',
     right: 0,
     top: 0,
     bottom: 0,
     zIndex: 20,
-    // width is set dynamically
   },
 }); 

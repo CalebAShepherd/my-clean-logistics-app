@@ -28,9 +28,9 @@ exports.getWarehouseItems = async (req, res) => {
  */
 exports.getWarehouseItem = async (req, res) => {
   try {
-    const { warehouseId, itemId } = req.params;
+    const { warehouseId, itemId, locationId } = req.params;
     const item = await prisma.warehouseItem.findUnique({
-      where: { warehouseId_itemId: { warehouseId, itemId } },
+      where: { warehouseId_itemId_locationId: { warehouseId, itemId, locationId } },
       include: { InventoryItem: { include: { supplier: true } }, Location: true, Warehouse: true },
     });
     if (!item) {
@@ -66,7 +66,7 @@ exports.createWarehouseItem = async (req, res) => {
       // On unique constraint violation, update existing
       if (err.code === 'P2002') {
         newEntry = await prisma.warehouseItem.update({
-          where: { warehouseId_itemId: { warehouseId, itemId } },
+          where: { warehouseId_itemId_locationId: { warehouseId, itemId, locationId } },
           data,
         });
       } else {
@@ -97,14 +97,14 @@ exports.createWarehouseItem = async (req, res) => {
  */
 exports.updateWarehouseItem = async (req, res) => {
   try {
-    const { warehouseId, itemId } = req.params;
+    const { warehouseId, itemId, locationId } = req.params;
     // Fetch previous quantity for stock movement
     const prev = await prisma.warehouseItem.findUnique({
-      where: { warehouseId_itemId: { warehouseId, itemId } },
+      where: { warehouseId_itemId_locationId: { warehouseId, itemId, locationId } },
     });
     const updates = req.body;
     const updated = await prisma.warehouseItem.update({
-      where: { warehouseId_itemId: { warehouseId, itemId } },
+      where: { warehouseId_itemId_locationId: { warehouseId, itemId, locationId } },
       data: updates
     });
     // Create stock movement for quantity delta
@@ -132,9 +132,9 @@ exports.updateWarehouseItem = async (req, res) => {
  */
 exports.deleteWarehouseItem = async (req, res) => {
   try {
-    const { warehouseId, itemId } = req.params;
+    const { warehouseId, itemId, locationId } = req.params;
     await prisma.warehouseItem.delete({
-      where: { warehouseId_itemId: { warehouseId, itemId } }
+      where: { warehouseId_itemId_locationId: { warehouseId, itemId, locationId } }
     });
     return res.status(204).end();
   } catch (err) {
