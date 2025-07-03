@@ -21,11 +21,8 @@ import { useSettings } from '../context/SettingsContext';
 import { hasReceivingOperations, canCreateASNs } from '../utils/featureFlags';
 import InternalHeader from '../components/InternalHeader';
 
-const localhost = Platform.OS === 'android' ? '10.0.2.2' : '192.168.0.73';
-const API_URL =
-  Constants.manifest?.extra?.apiUrl ||
-  Constants.expoConfig?.extra?.apiUrl ||
-  `http://${localhost}:3000`;
+import { getApiUrl } from '../utils/apiHost';
+const API_URL = getApiUrl();
 
 const ASNManagementScreen = ({ navigation }) => {
   const { userToken } = useContext(AuthContext);

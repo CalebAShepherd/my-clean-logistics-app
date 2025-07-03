@@ -1,11 +1,8 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import { getApiUrl } from '../utils/apiHost';
 
-const localhost = Platform.OS === 'android' ? '10.0.2.2' : '192.168.0.73';
-const API_URL =
-  Constants.manifest?.extra?.apiUrl ||
-  Constants.expoConfig?.extra?.apiUrl ||
-  `http://${localhost}:3000`;
+const API_URL = getApiUrl();
 
 export async function fetchSKUAttributes(token) {
   const res = await fetch(`${API_URL}/sku-attributes`, {

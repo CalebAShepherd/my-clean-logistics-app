@@ -11,8 +11,9 @@ import { fetchWarehouses } from '../api/warehouses';
 import { listRoutes } from '../api/routes';
 import { useIsFocused } from '@react-navigation/native';
 import InternalHeader from '../components/InternalHeader';
+import { getApiUrl } from '../utils/apiHost';
 
-const API_URL = Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.73:3000';
+const API_URL = Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || getApiUrl();
 
 function RouteOptimizationScreen({ navigation }) {
   const flatListRef = useRef(null);

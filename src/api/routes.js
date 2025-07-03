@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
+import { getApiUrl } from '../utils/apiHost';
 
-// Use the same network address fallback as frontend screens
-const API_URL = Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.73:3000';
+const API_URL = getApiUrl();
 
 /**
  * Fetch all routes (optionally filter by transporterId) from the backend.

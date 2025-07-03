@@ -8,8 +8,9 @@ import { fetchNotifications } from '../api/notifications';
 import InternalHeader from '../components/InternalHeader';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
+import { getApiUrl } from '../utils/apiHost';
 
-const API_URL = Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.73:3000';
+const API_URL = getApiUrl();
 
 export default function ConversationListScreen({ navigation }) {
   const { userToken, user } = useContext(AuthContext);

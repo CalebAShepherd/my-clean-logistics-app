@@ -60,7 +60,7 @@ const getCycleCountById = async (req, res) => {
     const cycleCount = await prisma.cycleCount.findUnique({
       where: { id },
       include: {
-        warehouse: { select: { name: true, address: true } },
+        warehouse: { select: { id: true, name: true, address: true } },
         createdBy: { select: { id: true, username: true, email: true } },
         assignedTo: { select: { id: true, username: true, email: true } },
         tasks: {
@@ -253,37 +253,168 @@ const generateTasks = async (req, res) => {
   }
 };
 
-// Assign tasks to users
+// Get warehouse workers for task assignment
+const getWarehouseWorkers = async (req, res) => {
+  try {
+    const { warehouseId } = req.params;
+
+    const workers = await prisma.user.findMany({
+      where: {
+        role: 'warehouse_worker',
+        warehouseId: warehouseId
+      },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        phone: true
+      },
+      orderBy: {
+        username: 'asc'
+      }
+    });
+
+    res.json(workers);
+  } catch (error) {
+    console.error('Error fetching warehouse workers:', error);
+    res.status(500).json({ error: 'Failed to fetch warehouse workers' });
+  }
+};
+
+// Enhanced assign tasks to support bulk assignment
 const assignTasks = async (req, res) => {
   try {
     const { cycleCountId } = req.params;
-    const { assignments } = req.body; // [{ taskId, assignedToId }]
+    const { assignments } = req.body; // [{ taskId, assignedToId }] or [{ taskIds: [], assignedToId }]
 
-    const tasks = await prisma.cycleCountTask.updateMany({
+    // Flatten task assignments for bulk operations
+    const taskAssignments = [];
+    for (const assignment of assignments) {
+      if (assignment.taskIds && Array.isArray(assignment.taskIds)) {
+        // Bulk assignment - multiple tasks to one user
+        assignment.taskIds.forEach(taskId => {
+          taskAssignments.push({
+            taskId,
+            assignedToId: assignment.assignedToId
+          });
+        });
+      } else if (assignment.taskId) {
+        // Single task assignment
+        taskAssignments.push({
+          taskId: assignment.taskId,
+          assignedToId: assignment.assignedToId
+        });
+      }
+    }
+
+    // Validate all tasks belong to the cycle count
+    const taskIds = taskAssignments.map(a => a.taskId);
+    const validTasks = await prisma.cycleCountTask.findMany({
       where: {
-        id: { in: assignments.map(a => a.taskId) },
+        id: { in: taskIds },
         cycleCountId
       },
-      data: { status: 'ASSIGNED' }
+      select: { id: true }
     });
 
-    // Update individual task assignments
-    const updatePromises = assignments.map(assignment =>
+    if (validTasks.length !== taskIds.length) {
+      return res.status(400).json({ error: 'Some tasks do not belong to this cycle count' });
+    }
+
+    // Update task assignments
+    const updatePromises = taskAssignments.map(assignment =>
       prisma.cycleCountTask.update({
         where: { id: assignment.taskId },
         data: { 
           assignedToId: assignment.assignedToId,
-          status: 'ASSIGNED'
+          status: assignment.assignedToId ? 'ASSIGNED' : 'PENDING'
+        },
+        include: {
+          assignedTo: { select: { id: true, username: true } },
+          location: { select: { zone: true, aisle: true, shelf: true, bin: true } }
         }
       })
     );
 
-    await Promise.all(updatePromises);
+    const updatedTasks = await Promise.all(updatePromises);
 
-    res.json({ message: 'Tasks assigned successfully' });
+    res.json({ 
+      message: 'Tasks assigned successfully',
+      assignedCount: taskAssignments.length,
+      tasks: updatedTasks
+    });
   } catch (error) {
     console.error('Error assigning tasks:', error);
     res.status(500).json({ error: 'Failed to assign tasks' });
+  }
+};
+
+// Get individual task details
+const getTaskById = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+
+    const task = await prisma.cycleCountTask.findUnique({
+      where: { id: taskId },
+      include: {
+        cycleCount: {
+          select: { 
+            id: true, 
+            name: true, 
+            description: true,
+            warehouse: { select: { id: true, name: true } }
+          }
+        },
+        location: {
+          select: { id: true, zone: true, aisle: true, shelf: true, bin: true }
+        },
+        assignedTo: { 
+          select: { id: true, username: true, email: true } 
+        },
+        items: {
+          include: {
+            item: { 
+              select: { id: true, sku: true, name: true, unit: true } 
+            },
+            location: { 
+              select: { zone: true, aisle: true, shelf: true, bin: true } 
+            },
+            countedBy: { 
+              select: { id: true, username: true } 
+            }
+          },
+          orderBy: { item: { sku: 'asc' } }
+        }
+      }
+    });
+
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    // Calculate task statistics
+    const stats = {
+      totalItems: task.items.length,
+      countedItems: task.items.filter(item => 
+        item.status === 'COUNTED' || item.status === 'APPROVED'
+      ).length,
+      varianceItems: task.items.filter(item => 
+        item.variance !== null && item.variance !== 0
+      ).length,
+      accurateItems: task.items.filter(item => 
+        item.variance === 0 && item.status === 'COUNTED'
+      ).length
+    };
+
+    stats.progress = stats.totalItems > 0 ? 
+      Math.round((stats.countedItems / stats.totalItems) * 100) : 0;
+    stats.accuracy = stats.countedItems > 0 ? 
+      Math.round((stats.accurateItems / stats.countedItems) * 100) : 0;
+
+    res.json({ ...task, stats });
+  } catch (error) {
+    console.error('Error fetching task:', error);
+    res.status(500).json({ error: 'Failed to fetch task details' });
   }
 };
 
@@ -292,12 +423,17 @@ const getMyTasks = async (req, res) => {
   try {
     const userId = req.user.id;
     const { status, warehouseId } = req.query;
+    
+    console.log('🔍 getMyTasks: Request from user:', userId);
+    console.log('🔍 getMyTasks: Query params:', { status, warehouseId });
 
     const where = {
       assignedToId: userId,
       ...(status && { status }),
       ...(warehouseId && { cycleCount: { warehouseId } })
     };
+    
+    console.log('🔍 getMyTasks: Prisma where clause:', JSON.stringify(where, null, 2));
 
     const tasks = await prisma.cycleCountTask.findMany({
       where,
@@ -316,9 +452,14 @@ const getMyTasks = async (req, res) => {
       orderBy: { createdAt: 'asc' }
     });
 
+    console.log('📊 getMyTasks: Found', tasks.length, 'tasks for user', userId);
+    tasks.forEach((task, index) => {
+      console.log(`📋 getMyTasks: Task ${index + 1}: ID=${task.id}, Status=${task.status}, CycleCount=${task.cycleCountId}, Items=${task.items.length}`);
+    });
+
     res.json(tasks);
   } catch (error) {
-    console.error('Error fetching user tasks:', error);
+    console.error('❌ getMyTasks: Error fetching user tasks:', error);
     res.status(500).json({ error: 'Failed to fetch tasks' });
   }
 };
@@ -786,6 +927,8 @@ module.exports = {
   createCycleCount,
   generateTasks,
   assignTasks,
+  getWarehouseWorkers,
+  getTaskById,
   getMyTasks,
   startTask,
   countItem,

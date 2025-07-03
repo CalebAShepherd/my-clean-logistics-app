@@ -112,4 +112,50 @@ router.get(
   analyticsController.inventoryAging
 );
 
+// Procurement analytics
+router.get(
+  '/procurement-overview',
+  requireAuth,
+  requireRole(['admin']),
+  analyticsController.getProcurementOverview
+);
+router.get(
+  '/procurement/spend',
+  requireAuth,
+  requireRole(['admin']),
+  analyticsController.getProcurementSpendAnalysis
+);
+router.get(
+  '/procurement/trends',
+  requireAuth,
+  requireRole(['admin']),
+  analyticsController.getProcurementTrends
+);
+router.get(
+  '/procurement/cost-savings',
+  requireAuth,
+  requireRole(['admin']),
+  analyticsController.getCostSavingsAnalysis
+);
+router.get(
+  '/procurement/requisitions',
+  requireAuth,
+  requireRole(['admin']),
+  analyticsController.getPurchaseRequisitionAnalytics
+);
+router.get(
+  '/procurement/orders',
+  requireAuth,
+  requireRole(['admin']),
+  analyticsController.getPurchaseOrderAnalytics
+);
+
+// CRM Dashboard analytics
+router.get(
+  '/crm/dashboard',
+  requireAuth,
+  requireRole(['admin', 'crm_admin']),
+  analyticsController.getCRMDashboard
+);
+
 module.exports = router; 

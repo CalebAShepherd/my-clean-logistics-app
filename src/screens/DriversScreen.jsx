@@ -17,11 +17,12 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { AuthContext } from '../context/AuthContext';
 import InternalHeader from '../components/InternalHeader';
+import { getApiUrl } from '../utils/apiHost';
 
 const API_URL =
   Constants.manifest?.extra?.apiUrl ||
   Constants.expoConfig?.extra?.apiUrl ||
-  'http://192.168.0.73:3000';
+  getApiUrl();
 
 export default function DriversScreen({ navigation }) {
   const { userToken } = useContext(AuthContext);

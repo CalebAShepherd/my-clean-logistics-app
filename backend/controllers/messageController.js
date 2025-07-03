@@ -64,14 +64,47 @@ exports.checkConversationExists = async (req, res) => {
 // Create a new conversation with specified participant IDs or return existing one
 exports.createConversation = async (req, res) => {
   const { participantIds, name } = req.body;
+  const { id: senderId, role: senderRole } = req.user;
+
   if (!participantIds || !participantIds.length) {
     return res.status(400).json({ error: 'participantIds are required' });
   }
-  
+
   try {
-    // Ensure the current user is included in the participant list
-    const allParticipantIds = [...new Set([...participantIds, req.user.id])];
-    
+    const allParticipantIds = [...new Set([...participantIds, senderId])];
+
+    // --- Messaging Restriction Logic ---
+    const CRM_ROLES = ['crm_admin', 'sales_rep', 'account_manager'];
+    const isSenderCrmStaff = CRM_ROLES.includes(senderRole);
+
+    if (isSenderCrmStaff) {
+      const participants = await prisma.user.findMany({
+        where: { id: { in: allParticipantIds } },
+        select: { id: true, role: true },
+      });
+
+      const participantRoles = participants.map(p => p.role);
+
+      const isOnlyCrmStaff = participantRoles.every(role => CRM_ROLES.includes(role));
+      const containsAdmin = participantRoles.includes('admin');
+
+      // A regular CRM staff member can only message other CRM staff.
+      if (senderRole !== 'crm_admin' && !isOnlyCrmStaff) {
+        return res.status(403).json({ error: 'You can only message other CRM staff.' });
+      }
+
+      // A CRM admin can message other CRM staff and the main admin.
+      if (senderRole === 'crm_admin' && !isOnlyCrmStaff && !containsAdmin) {
+        return res.status(403).json({ error: 'You can only message other CRM staff or the main admin.' });
+      }
+      
+      // If the chat includes the main admin, it must be a 1-on-1 chat
+      if (senderRole === 'crm_admin' && containsAdmin && allParticipantIds.length > 2) {
+          return res.status(403).json({ error: 'You can only have a 1-on-1 conversation with the main admin.' });
+      }
+    }
+    // --- End of Restriction Logic ---
+
     const exactMatch = await findExistingConversation(allParticipantIds);
     
     if (exactMatch) {
@@ -321,10 +354,13 @@ exports.searchUsers = async (req, res) => {
   let allowedRoles;
   if (['admin','dispatcher'].includes(userRole)) {
     // Admin and dispatcher can message all users
-    allowedRoles = ['admin','client','dispatcher','carrier','dev','transporter','warehouse_admin'];
+    allowedRoles = ['admin','client','dispatcher','carrier','dev','transporter','warehouse_admin','warehouse_worker'];
   } else if (userRole === 'warehouse_admin') {
-    // Warehouse admin can message other warehouse admins, admin, dispatcher
-    allowedRoles = ['warehouse_admin','admin','dispatcher', 'transporter'];
+    // Warehouse admin can message other warehouse admins, admin, dispatcher, and warehouse workers
+    allowedRoles = ['warehouse_admin','admin','dispatcher', 'transporter', 'warehouse_worker'];
+  } else if (userRole === 'warehouse_worker') {
+    // Warehouse worker can only message warehouse admin
+    allowedRoles = ['warehouse_admin'];
   } else if (userRole === 'client') {
     // Client can message dispatcher
     allowedRoles = ['dispatcher'];

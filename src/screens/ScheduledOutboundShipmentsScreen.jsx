@@ -18,6 +18,7 @@ import InternalHeader from '../components/InternalHeader';
 import { AuthContext } from '../context/AuthContext';
 import { fetchWarehouses } from '../api/warehouses';
 import Constants from 'expo-constants';
+import { getApiUrl } from '../utils/apiHost';
 
 const statusLabelMap = { 
   CREATED: 'Processing', 
@@ -51,11 +52,8 @@ export default function ScheduledOutboundShipmentsScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
 
   // Determine API base URL
-  const localhost = Platform.OS === 'android' ? '10.0.2.2' : '192.168.0.73';
-  const API_URL =
-    Constants.manifest?.extra?.apiUrl ||
-    Constants.expoConfig?.extra?.apiUrl ||
-    `http://${localhost}:3000`;
+  
+  const API_URL = getApiUrl();
 
   // Get first warehouse for this admin
   useEffect(() => {

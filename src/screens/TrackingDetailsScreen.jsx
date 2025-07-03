@@ -9,11 +9,12 @@ import { listRoutes } from '../api/routes';
 import { fetchFleetLocations } from '../api/locations';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import polyline from '@mapbox/polyline';
+import { getApiUrl } from '../utils/apiHost';
 
 const API_URL =
   Constants.manifest?.extra?.apiUrl ||
   Constants.expoConfig?.extra?.apiUrl ||
-  'http://192.168.0.73:3000';
+  getApiUrl();
 
 const statusLabelMap = { 
   CREATED: 'Processing', 

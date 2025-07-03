@@ -19,9 +19,11 @@ import { AuthContext } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { hasCrossDocking } from '../utils/featureFlags';
 import InternalHeader from '../components/InternalHeader';
+import { getWarehouseWorkers } from '../api/cycleCounting';
+import { getApiUrl } from '../utils/apiHost';
 
-const localhost = Platform.OS === 'android' ? '10.0.2.2' : '192.168.0.73';
-const API_URL = `http://${localhost}:3000`;
+
+const API_URL = getApiUrl();
 
 const CrossDockManagementScreen = ({ navigation }) => {
   const { userToken } = useContext(AuthContext);
@@ -97,14 +99,13 @@ const CrossDockManagementScreen = ({ navigation }) => {
   };
 
   const loadWorkers = async () => {
-    if (!selectedWarehouse) return;
+    if (!selectedWarehouse) {
+      return;
+    }
     
     try {
-      const response = await fetch(`${API_URL}/users?warehouseId=${selectedWarehouse}&role=WAREHOUSE_WORKER`, {
-        headers: { Authorization: `Bearer ${userToken}` }
-      });
-      const data = await response.json();
-      setWorkers(data);
+      const workers = await getWarehouseWorkers(userToken, selectedWarehouse);
+      setWorkers(workers);
     } catch (error) {
       console.error('Error loading workers:', error);
     }

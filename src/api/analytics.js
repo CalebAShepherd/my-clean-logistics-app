@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
+import { getApiUrl } from '../utils/apiHost';
 
-const API_URL = Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.73:3000';
+const API_URL = getApiUrl();
 
 /**
  * Fetch on-time vs late stats
@@ -9,7 +10,7 @@ export async function fetchOnTimeLate(token, start, end) {
   const params = new URLSearchParams();
   if (start) params.append('start', start.toISOString());
   if (end) params.append('end', end.toISOString());
-  const res = await fetch(`${API_URL}/analytics/deliveries?${params}`, {
+  const res = await fetch(`${API_URL}/api/analytics/deliveries?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Error fetching onTimeLate: ${res.status}`);
@@ -23,7 +24,7 @@ export async function fetchCompletedCount(token, start, end) {
   const params = new URLSearchParams();
   if (start) params.append('start', start.toISOString());
   if (end) params.append('end', end.toISOString());
-  const res = await fetch(`${API_URL}/analytics/completed?${params}`, {
+  const res = await fetch(`${API_URL}/api/analytics/completed?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Error fetching completedCount: ${res.status}`);
@@ -34,7 +35,7 @@ export async function fetchCompletedCount(token, start, end) {
  * Fetch count of shipments currently in transit
  */
 export async function fetchInTransitCount(token) {
-  const res = await fetch(`${API_URL}/analytics/in-transit`, {
+  const res = await fetch(`${API_URL}/api/analytics/in-transit`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Error fetching in-transit count: ${res.status}`);
@@ -50,7 +51,7 @@ export async function fetchDeliveryTrends(token, start, end, period = 'day') {
   if (start) params.append('start', start.toISOString());
   if (end) params.append('end', end.toISOString());
   if (period) params.append('period', period);
-  const res = await fetch(`${API_URL}/analytics/trends?${params}`, {
+  const res = await fetch(`${API_URL}/api/analytics/trends?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Error fetching trends: ${res.status}`);
@@ -67,7 +68,7 @@ export async function fetchForecast(token, start, end, period = 'day', method = 
   if (period) params.append('period', period);
   if (method) params.append('method', method);
   if (window) params.append('window', window);
-  const res = await fetch(`${API_URL}/analytics/deliveries/forecast?${params}`, {
+  const res = await fetch(`${API_URL}/api/analytics/deliveries/forecast?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Error fetching forecast: ${res.status}`);
@@ -82,9 +83,25 @@ export async function fetchDeliveryAnomalies(token, start, end, sigma = 2) {
   if (start) params.append('start', start.toISOString());
   if (end) params.append('end', end.toISOString());
   params.append('sigma', sigma);
-  const res = await fetch(`${API_URL}/analytics/deliveries/anomalies?${params}`, {
+  const res = await fetch(`${API_URL}/api/analytics/deliveries/anomalies?${params}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Error fetching anomalies: ${res.status}`);
   return res.json();
+}
+
+/**
+ * Fetch CRM dashboard data
+ */
+export async function fetchCRMDashboard(token) {
+  const res = await fetch(`${API_URL}/api/analytics/crm/dashboard`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Error fetching CRM dashboard: ${res.status}`);
+  return res.json();
+}
+
+// Analytics API functions
+export const getAnalytics = async (period = '7d') => {
+  // ... existing code ...
 } 

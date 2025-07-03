@@ -6,6 +6,8 @@ const {
   createCycleCount,
   generateTasks,
   assignTasks,
+  getWarehouseWorkers,
+  getTaskById,
   getMyTasks,
   startTask,
   countItem,
@@ -20,23 +22,21 @@ const requireAuth = require('../middleware/requireAuth');
 // Apply authentication to all routes
 router.use(requireAuth);
 
-// Warehouse-level routes
+// Cycle count routes
 router.get('/warehouse/:warehouseId', getCycleCounts);
 router.get('/warehouse/:warehouseId/analytics', getCycleCountAnalytics);
-router.post('/warehouse/:warehouseId', createCycleCount);
-
-// Cycle count management routes
+router.get('/warehouse/:warehouseId/workers', getWarehouseWorkers);
 router.get('/:id', getCycleCountById);
+router.post('/', createCycleCount);
 router.post('/:id/generate-tasks', generateTasks);
 router.post('/:cycleCountId/assign-tasks', assignTasks);
-router.post('/:id/complete', completeCycleCount);
 
-// Mobile/worker routes
-router.get('/tasks/my-tasks', getMyTasks);
+// Task routes
+router.get('/tasks/:taskId', getTaskById);
+router.get('/my-tasks', getMyTasks);
 router.post('/tasks/:taskId/start', startTask);
 router.post('/items/:itemId/count', countItem);
-
-// Variance review routes (admin only)
-router.post('/items/:itemId/review', reviewVariance);
+router.post('/items/:itemId/review-variance', reviewVariance);
+router.post('/:id/complete', completeCycleCount);
 
 module.exports = router; 

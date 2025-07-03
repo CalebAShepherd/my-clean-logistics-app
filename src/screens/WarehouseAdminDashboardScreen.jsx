@@ -23,6 +23,7 @@ import { fetchInboundShipments } from '../api/shipments';
 import { fetchNotifications } from '../api/notifications';
 import Constants from 'expo-constants';
 import { useFocusEffect } from '@react-navigation/native';
+import { getApiUrl } from '../utils/apiHost';
 
 function WarehouseAdminDashboardScreen({ navigation }) {
   const { userToken } = useContext(AuthContext);
@@ -65,8 +66,8 @@ function WarehouseAdminDashboardScreen({ navigation }) {
       .finally(() => setLoadingInboundCount(false));
 
     setLoadingOutboundCount(true);
-    const localhost = Platform.OS === 'android' ? '10.0.2.2' : '192.168.0.73';
-    const API_URL = Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || `http://${localhost}:3000`;
+    
+    const API_URL = getApiUrl();
     fetch(`${API_URL}/api/shipments`, {
       headers: { Authorization: `Bearer ${userToken}` }
     })
@@ -367,7 +368,22 @@ function WarehouseAdminDashboardScreen({ navigation }) {
           <Text style={styles.sectionTitle}>Layout & Visualization</Text>
           <TouchableOpacity 
             style={styles.operationCard} 
-            onPress={() => navigation.navigate('Warehouse3DView')}
+            onPress={() => navigation.navigate('SpaceOptimizationDashboard')}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.7)']}
+              style={styles.operationCardGradient}
+            >
+              <MaterialCommunityIcons name="office-building-cog" size={28} color="#667eea" />
+              <Text style={styles.operationCardText}>Space Optimization</Text>
+              <MaterialCommunityIcons name="chevron-right" size={24} color="#667eea" />
+            </LinearGradient>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.operationCard} 
+            onPress={() => navigation.navigate('Warehouse3DView', { warehouseId })}
             activeOpacity={0.8}
           >
             <LinearGradient
@@ -376,6 +392,21 @@ function WarehouseAdminDashboardScreen({ navigation }) {
             >
               <MaterialCommunityIcons name="cube-scan" size={28} color="#667eea" />
               <Text style={styles.operationCardText}>3D Warehouse Editor</Text>
+              <MaterialCommunityIcons name="chevron-right" size={24} color="#667eea" />
+            </LinearGradient>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.operationCard} 
+            onPress={() => navigation.navigate('Warehouse2DBuilder', { warehouseId })}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.7)']}
+              style={styles.operationCardGradient}
+            >
+              <MaterialCommunityIcons name="floor-plan" size={28} color="#667eea" />
+              <Text style={styles.operationCardText}>2D Warehouse Builder</Text>
               <MaterialCommunityIcons name="chevron-right" size={24} color="#667eea" />
             </LinearGradient>
           </TouchableOpacity>

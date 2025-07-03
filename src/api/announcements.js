@@ -1,15 +1,12 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import { getApiUrl } from '../utils/apiHost';
 
-const localhost = Platform.OS === 'android' ? '10.0.2.2' : '192.168.0.73';
-const BASE_URL =
-  Constants.manifest?.extra?.apiUrl ||
-  Constants.expoConfig?.extra?.apiUrl ||
-  `http://${localhost}:3000`;
+const API_URL = getApiUrl();
 
 // Fetch all announcements (admin)
 export async function fetchAnnouncements(token) {
-  const res = await fetch(`${BASE_URL}/api/announcements`, {
+  const res = await fetch(`${API_URL}/api/announcements`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) {
@@ -21,7 +18,7 @@ export async function fetchAnnouncements(token) {
 
 // Create a new announcement (admin)
 export async function createAnnouncement(token, payload) {
-  const res = await fetch(`${BASE_URL}/api/announcements`, {
+  const res = await fetch(`${API_URL}/api/announcements`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),

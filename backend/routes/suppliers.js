@@ -19,4 +19,8 @@ router.put('/:id', requireAuth, requireRole(['admin','dev','warehouse_admin']), 
 // Delete a supplier
 router.delete('/:id', requireAuth, requireRole(['admin','dev','warehouse_admin']), supplierController.deleteSupplier);
 
+// Enhanced supplier management routes
+router.put('/:id/status', requireAuth, requireRole(['admin','dev','warehouse_admin']), supplierController.updateSupplierStatus);
+router.get('/:id/performance', requireAuth, requireRole(['admin','dev','warehouse_admin']), supplierController.getSupplierPerformance);
+
 module.exports = router; 

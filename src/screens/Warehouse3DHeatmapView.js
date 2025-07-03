@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useContext } from 'react';
 import { View, StyleSheet, ActivityIndicator, Dimensions, PanResponder, Modal, Text, ScrollView, KeyboardAvoidingView, Platform, SafeAreaView, Animated, TouchableOpacity, Alert } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { GLView } from 'expo-gl';
 import * as THREE from 'three';
 import { Renderer } from 'expo-three';
@@ -9,9 +10,12 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
 import { fetchWarehouseItems } from '../api/warehouseItems';
+import { getMyBlueprints, getBlueprintById } from '../api/blueprints';
+import { blueprintTo3D } from '../utils/blueprintTo3D';
+import { buildRackMesh } from '../utils/rackBuilder';
 console.log('Warehouse3DHeatmapView loaded');
 
-const LAYOUT_KEY = 'WAREHOUSE_LAYOUT_V1';
+const getLayoutKey = (warehouseId) => `WAREHOUSE_LAYOUT_V2::${warehouseId || 'default'}`;
 
 // SlideOutMenu component
 function SlideOutMenu({ visible, onClose, selectedTab, setSelectedTab, binHeatmapActive, setBinHeatmapActive, rackHeatmapActive, setRackHeatmapActive }) {
@@ -74,7 +78,7 @@ function SlideOutMenu({ visible, onClose, selectedTab, setSelectedTab, binHeatma
   );
 }
 
-export default function Warehouse3DHeatmapView() {
+export default function Warehouse3DHeatmapView({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [objects, setObjects] = useState([]);
   const objectsRef = useRef(objects);
@@ -113,6 +117,13 @@ export default function Warehouse3DHeatmapView() {
   const warehouseItemsListRef = useRef(warehouseItemsList);
   useEffect(() => { warehouseItemsListRef.current = warehouseItemsList; }, [warehouseItemsList]);
 
+  // Add layout selection state
+  const [showLayoutPicker, setShowLayoutPicker] = useState(false);
+  const [savedLayouts, setSavedLayouts] = useState([]);
+  const [currentLayoutId, setCurrentLayoutId] = useState(null);
+  const [currentLayoutName, setCurrentLayoutName] = useState('Default Layout');
+  const [loadingLayouts, setLoadingLayouts] = useState(false);
+
   const menuWidth = 260;
   const slideAnim = React.useRef(new Animated.Value(menuWidth)).current;
 
@@ -126,19 +137,20 @@ export default function Warehouse3DHeatmapView() {
 
   useEffect(() => {
     async function loadWarehouseItems() {
-      console.log('Fetching warehouse items for heatmap');
       if (!userToken) return;
       try {
         const items = await fetchWarehouseItems(userToken);
-        console.log('Fetched warehouse items:', items);
         const idMap = {};
         const labelMap = {};
         items.forEach(item => {
           if (item.locationId) idMap[item.locationId] = item;
+          // Also map with "bin-" prefix for 3D layout compatibility
+          if (item.locationId) idMap[`bin-${item.locationId}`] = item;
           const loc = item.Location;
           if (loc && loc.bin) labelMap[loc.bin] = item;
+          // Also try mapping with item.id as fallback
+          if (item.id) idMap[item.id] = item;
         });
-        console.log('warehouseItemsMap building; id keys:', Object.keys(idMap), 'label keys:', Object.keys(labelMap));
         setWarehouseItemsMap({ idMap, labelMap });
         // Store full list for composite matching
         setWarehouseItemsList(items);
@@ -148,6 +160,170 @@ export default function Warehouse3DHeatmapView() {
     }
     loadWarehouseItems();
   }, [userToken]);
+
+  // Refresh warehouse items when screen comes into focus (for new bins)
+  useFocusEffect(
+    React.useCallback(() => {
+      if (userToken) {
+        async function refreshWarehouseItems() {
+          try {
+            const items = await fetchWarehouseItems(userToken);
+            const idMap = {};
+            const labelMap = {};
+            items.forEach(item => {
+              if (item.locationId) idMap[item.locationId] = item;
+              const loc = item.Location;
+              if (loc && loc.bin) labelMap[loc.bin] = item;
+            });
+            setWarehouseItemsMap({ idMap, labelMap });
+            setWarehouseItemsList(items);
+          } catch (err) {
+            console.error('Error refreshing warehouse items:', err);
+          }
+        }
+        refreshWarehouseItems();
+      }
+    }, [userToken])
+  );
+
+  // Load saved layouts on mount
+  useEffect(() => {
+    loadSavedLayouts();
+  }, [userToken]);
+  
+  // Refresh layouts when screen comes into focus (to pick up newly saved layouts)
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('Heatmap view focused, refreshing layouts...');
+      loadSavedLayouts();
+    }, [])
+  );
+
+  const loadSavedLayouts = async () => {
+    try {
+      setLoadingLayouts(true);
+      
+      // Load from multiple sources:
+      // 1. Server-side blueprints (preferred)
+      let layouts = [];
+      
+      try {
+        const blueprints = await getMyBlueprints();
+        layouts = blueprints.map(blueprint => ({
+          id: blueprint.id,
+          name: blueprint.name,
+          warehouseName: blueprint.warehouse?.name || 'Unknown Warehouse',
+          type: 'blueprint',
+          data: blueprint,
+          lastModified: blueprint.updatedAt || blueprint.createdAt,
+        }));
+      } catch (error) {
+        console.warn('Could not load blueprints:', error);
+      }
+      
+      // 2. Local AsyncStorage layouts (for backward compatibility)
+      try {
+        const localKeys = await AsyncStorage.getAllKeys();
+        const layoutKeys = localKeys.filter(key => 
+          key.startsWith('WAREHOUSE_LAYOUT_') || 
+          key.startsWith('SAVED_LAYOUT_')
+        );
+        
+        for (const key of layoutKeys) {
+          const data = await AsyncStorage.getItem(key);
+          if (data) {
+            const parsed = JSON.parse(data);
+            const layoutName = parsed.metadata?.name || 
+                             key.replace('WAREHOUSE_LAYOUT_', '').replace('SAVED_LAYOUT_', '') || 
+                             'Unnamed Layout';
+            
+            layouts.push({
+              id: key,
+              name: layoutName,
+              warehouseName: parsed.metadata?.warehouseName || 'Local Storage',
+              type: 'local',
+              data: parsed,
+              lastModified: parsed.metadata?.savedAt || new Date().toISOString(),
+            });
+          }
+        }
+      } catch (error) {
+        console.warn('Could not load local layouts:', error);
+      }
+      
+      // Sort by last modified (newest first)
+      layouts.sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified));
+      
+      setSavedLayouts(layouts);
+      
+      // Auto-load the most recent layout if available
+      if (layouts.length > 0 && !currentLayoutId) {
+        await loadLayout(layouts[0]);
+      }
+      
+    } catch (error) {
+      console.error('Error loading saved layouts:', error);
+    } finally {
+      setLoadingLayouts(false);
+    }
+  };
+
+  const loadLayout = async (layoutInfo) => {
+    try {
+      setLoading(true);
+      let layoutData = null;
+      
+      if (layoutInfo.type === 'blueprint') {
+        // Load blueprint and convert to 3D objects
+        const blueprint = await getBlueprintById(layoutInfo.id);
+        const objects3D = blueprintTo3D(blueprint);
+        layoutData = {
+          objects: objects3D,
+          metadata: {
+            name: blueprint.name,
+            warehouseName: blueprint.warehouse?.name,
+            source: 'blueprint',
+            blueprintId: blueprint.id,
+          }
+        };
+      } else {
+        // Load local layout
+        layoutData = layoutInfo.data;
+      }
+      
+      if (layoutData?.objects) {
+        setObjects(layoutData.objects);
+        setCurrentLayoutId(layoutInfo.id);
+        setCurrentLayoutName(layoutInfo.name);
+        
+        // Restore camera if available
+        if (layoutData.camera) {
+          cameraStateRef.current = {
+            radius: layoutData.camera.radius || 15,
+            theta: layoutData.camera.theta || Math.PI / 3,
+            phi: layoutData.camera.phi || Math.PI / 4,
+          };
+          cameraTargetRef.current = layoutData.camera.target || { x: 0, y: 0, z: 0 };
+        }
+        
+        console.log(`Loaded layout: ${layoutInfo.name} with ${layoutData.objects.length} objects`);
+      }
+      
+    } catch (error) {
+      console.error('Error loading layout:', error);
+      Alert.alert('Error', 'Failed to load the selected warehouse layout.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLayoutSelection = (layoutId) => {
+    const layout = savedLayouts.find(l => l.id === layoutId);
+    if (layout) {
+      loadLayout(layout);
+      setShowLayoutPicker(false);
+    }
+  };
 
   // Control Functions
   const resetCameraView = () => {
@@ -329,29 +505,47 @@ export default function Warehouse3DHeatmapView() {
     }
   };
 
+  // Modified initial load effect
   useEffect(() => {
     (async () => {
-      setLoading(true);
-      const json = await AsyncStorage.getItem(LAYOUT_KEY);
-      if (json) {
-        let parsed = JSON.parse(json);
-        if (Array.isArray(parsed)) {
-          setObjects(parsed);
-        } else if (parsed && parsed.objects) {
-          setObjects(parsed.objects);
-          if (parsed.camera) {
-            cameraStateRef.current = {
-              radius: parsed.camera.radius,
-              theta: parsed.camera.theta,
-              phi: parsed.camera.phi,
-            };
-            cameraTargetRef.current = parsed.camera.target || { x: 0, y: 0, z: 0 };
+      // Don't auto-load if we have layouts - let user choose or use most recent
+      if (savedLayouts.length === 0) {
+        setLoading(true);
+        // Try to get the most recent warehouse layout, fallback to default
+        let json = null;
+        const allKeys = await AsyncStorage.getAllKeys();
+        const layoutKeys = allKeys.filter(key => key.startsWith('WAREHOUSE_LAYOUT_V2::'));
+        
+        if (layoutKeys.length > 0) {
+          // Use the most recent warehouse layout
+          const mostRecentKey = layoutKeys.sort().pop();
+          json = await AsyncStorage.getItem(mostRecentKey);
+        }
+        
+        if (!json) {
+          // Fallback to default key
+          json = await AsyncStorage.getItem(getLayoutKey());
+        }
+        if (json) {
+          let parsed = JSON.parse(json);
+          if (Array.isArray(parsed)) {
+            setObjects(parsed);
+          } else if (parsed && parsed.objects) {
+            setObjects(parsed.objects);
+            if (parsed.camera) {
+              cameraStateRef.current = {
+                radius: parsed.camera.radius,
+                theta: parsed.camera.theta,
+                phi: parsed.camera.phi,
+              };
+              cameraTargetRef.current = parsed.camera.target || { x: 0, y: 0, z: 0 };
+            }
           }
         }
+        setLoading(false);
       }
-      setLoading(false);
     })();
-  }, []);
+  }, [savedLayouts.length]);
 
   const onContextCreate = async (gl) => {
     const { drawingBufferWidth: width, drawingBufferHeight: height } = gl;
@@ -417,53 +611,41 @@ export default function Warehouse3DHeatmapView() {
         const mesh = meshRefs.current[idx];
         if (mesh) {
           mesh.position.set(obj.position.x, obj.position.y, obj.position.z);
+          // Helper to apply color to Mesh or Group
+          const applyColorToMesh = (meshObj, colorValue, hslArgs = null) => {
+            if (meshObj.material) {
+              if (hslArgs) {
+                meshObj.material.color.setHSL(...hslArgs);
+              } else {
+                meshObj.material.color.set(colorValue);
+              }
+            } else if (meshObj.children) {
+              meshObj.children.forEach(child => {
+                if (child.material) {
+                  if (hslArgs) {
+                    child.material.color.setHSL(...hslArgs);
+                  } else {
+                    child.material.color.set(colorValue);
+                  }
+                }
+              });
+            }
+          };
           if (obj.id === selectedId) {
-            mesh.material.color.set(0xffa500); // orange highlight
+            applyColorToMesh(mesh, 0xffa500); // orange highlight
           } else if (activeHeatmapRef.current === 'binCapacity' && obj.type === 'bin') {
-            // Composite match by bin label and its containing shelf, aisle, and zone
-            const itemsList = warehouseItemsListRef.current;
-            // Identify the topmost shelf under the bin with stacking support
-            const binBottomY = obj.position.y - obj.size.y / 2;
-            const shelfCandidates = objectsRef.current.filter(o => o.type === 'shelf' &&
-              Math.abs(o.position.x - obj.position.x) <= (o.size.x / 2 + obj.size.x / 2) &&
-              Math.abs(o.position.z - obj.position.z) <= (o.size.z / 2 + obj.size.z / 2) &&
-              (o.position.y + o.size.y / 2) <= binBottomY + 0.001
-            );
-            const shelfObj = shelfCandidates.length > 0
-              ? shelfCandidates.reduce((prev, curr) => {
-                  const prevTop = prev.position.y + prev.size.y / 2;
-                  const currTop = curr.position.y + curr.size.y / 2;
-                  return currTop > prevTop ? curr : prev;
-                }, shelfCandidates[0])
-              : undefined;
-            const aisleObj = objectsRef.current.find(o => o.type === 'aisle'
-              && Math.abs(o.position.x - obj.position.x) <= o.size.x / 2
-              && Math.abs(o.position.z - obj.position.z) <= o.size.z / 2);
-            const zoneObj = objectsRef.current.find(o => o.type === 'zone'
-              && Math.abs(o.position.x - obj.position.x) <= o.size.x / 2
-              && Math.abs(o.position.z - obj.position.z) <= o.size.z / 2);
-            const shelfLabel = shelfObj?.label;
-            const aisleLabel = aisleObj?.label;
-            const zoneLabel = zoneObj?.label;
-            // Composite lookup matching warehouse item record
-            const item = itemsList.find(i => {
-              const loc = i.Location;
-              return loc
-                && loc.bin === obj.label
-                && loc.shelf === shelfLabel
-                && loc.aisle === aisleLabel
-                && loc.zone === zoneLabel;
-            });
-            if (item && item.maxThreshold > 0) {
-              let freePct = (item.maxThreshold - item.quantity) / item.maxThreshold;
+            // Map heatmap using idMap or labelMap for compatibility with new layouts
+            const { idMap, labelMap } = warehouseItemsMapRef.current;
+            const mapItem = idMap[obj.id] || idMap[obj.id.replace('bin-', '')] || labelMap[obj.label];
+            if (mapItem && mapItem.maxThreshold > 0) {
+              let freePct = (mapItem.maxThreshold - mapItem.quantity) / mapItem.maxThreshold;
               freePct = Math.max(0, Math.min(1, freePct));
-              // console.log(`heatmap bin ${obj.id} freePct:`, freePct, 'item:', item);
-              mesh.material.color.setHSL(freePct * 0.33, 1, 0.5);
+              applyColorToMesh(mesh, null, [freePct * 0.33, 1, 0.5]);
             } else {
-              mesh.material.color.set(obj.color);
+              applyColorToMesh(mesh, obj.color);
             }
           } else {
-            mesh.material.color.set(obj.color);
+            applyColorToMesh(mesh, obj.color);
           }
         }
       });
@@ -482,6 +664,31 @@ export default function Warehouse3DHeatmapView() {
     render();
   };
 
+  // Rebuild meshes whenever objects change to render full rack shapes immediately
+  useEffect(() => {
+    if (!sceneRef.current) return;
+    // Remove old meshes
+    meshRefs.current.forEach(mesh => {
+      if (sceneRef.current.children.includes(mesh)) {
+        sceneRef.current.remove(mesh);
+      }
+    });
+    // Create new meshes with detailed rack shapes
+    meshRefs.current = objectsRef.current.map(obj => {
+      let mesh;
+      if (obj.type === 'rack') {
+        mesh = buildRackMesh(obj);
+      } else {
+        const geometry = new THREE.BoxGeometry(obj.size.x, obj.size.y, obj.size.z);
+        const material = new THREE.MeshStandardMaterial({ color: obj.color });
+        mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(obj.position.x, obj.position.y, obj.position.z);
+      }
+      sceneRef.current.add(mesh);
+      return mesh;
+    });
+  }, [objects]);
+
   if (loading) {
     return (
       <LinearGradient 
@@ -492,7 +699,9 @@ export default function Warehouse3DHeatmapView() {
           <MaterialCommunityIcons name="view-grid-plus" size={64} color="#007AFF" />
           <ActivityIndicator size="large" color="#007AFF" style={styles.loadingSpinner} />
           <Text style={styles.loadingTitle}>Loading 3D Heatmap</Text>
-          <Text style={styles.loadingSubtitle}>Preparing warehouse visualization...</Text>
+          <Text style={styles.loadingSubtitle}>
+            {loadingLayouts ? 'Loading warehouse layouts...' : 'Preparing warehouse visualization...'}
+          </Text>
         </View>
       </LinearGradient>
     );
@@ -508,7 +717,19 @@ export default function Warehouse3DHeatmapView() {
         <SafeAreaView style={styles.headerContent}>
           <View style={styles.headerLeft}>
             <MaterialCommunityIcons name="view-grid-plus" size={24} color="white" />
-            <Text style={styles.headerTitle}>3D Heatmap</Text>
+            <View style={styles.headerTitleContainer}>
+              <Text style={styles.headerTitle}>3D Heatmap</Text>
+              <TouchableOpacity 
+                style={styles.layoutSelector}
+                onPress={() => setShowLayoutPicker(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.layoutSelectorText} numberOfLines={1}>
+                  {currentLayoutName}
+                </Text>
+                <MaterialCommunityIcons name="chevron-down" size={16} color="white" />
+              </TouchableOpacity>
+            </View>
           </View>
           <View style={styles.headerRight}>
             {activeHeatmap && (
@@ -591,149 +812,139 @@ export default function Warehouse3DHeatmapView() {
         transparent={true}
         onRequestClose={() => setShowProperties(false)}
       >
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView
-            style={styles.modalContent}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
-          >
-            <View style={styles.modalHeader}>
-              <View style={styles.modalHeaderLeft}>
-                <MaterialCommunityIcons name="information-outline" size={24} color="#007AFF" />
-                <Text style={styles.modalTitle}>Component Details</Text>
+        <View style={[styles.modalOverlay, { backgroundColor: 'white' }]}> 
+          <SafeAreaView style={{ flex: 1 }}>
+            <KeyboardAvoidingView
+              style={styles.modalContent}
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
+            >
+              <View style={styles.modalHeader}>
+                <View style={styles.modalHeaderLeft}>
+                  <MaterialCommunityIcons name="information-outline" size={24} color="#007AFF" />
+                  <Text style={styles.modalTitle}>Component Details</Text>
+                </View>
+                <TouchableOpacity 
+                  style={styles.modalCloseButton}
+                  onPress={() => setShowProperties(false)}
+                  activeOpacity={0.7}
+                >
+                  <MaterialCommunityIcons name="close" size={20} color="#8E8E93" />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity 
-                style={styles.modalCloseButton}
-                onPress={() => setShowProperties(false)}
-                activeOpacity={0.7}
-              >
-                <MaterialCommunityIcons name="close" size={20} color="#8E8E93" />
-              </TouchableOpacity>
-            </View>
-            
-            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-              {(() => {
-                const obj = objects.find(o => o.id === selectedId);
-                                  if (!obj) return null;
+              
+              <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                {(() => {
+                  const obj = objects.find(o => o.id === selectedId);
+                  if (!obj) return null;
+
+                  // Get bin data from warehouse items
+                  const { idMap, labelMap } = warehouseItemsMap;
+                  const binData = idMap[obj.id] || idMap[obj.id.replace('bin-', '')] || labelMap[obj.label];
+                  
                   return (
                     <View style={styles.propertyContainer}>
-                      <View style={styles.propertyItem}>
-                        <Text style={styles.modalLabel}>Type</Text>
-                        <View style={styles.propertyValueContainer}>
+                      {/* Component Type & Label */}
+                      <View style={styles.componentHeader}>
+                        <View style={styles.componentIcon}>
                           <MaterialCommunityIcons 
-                            name={obj.type === 'bin' ? 'package-variant' : 'cube-outline'} 
-                            size={16} 
+                            name={obj.type === 'bin' ? 'package-variant' : obj.type === 'rack' ? 'shelf' : 'cube-outline'} 
+                            size={24} 
                             color="#007AFF" 
                           />
-                          <Text style={styles.modalValue}>{obj.type}</Text>
+                        </View>
+                        <View style={styles.componentInfo}>
+                          <Text style={styles.componentType}>{obj.type.toUpperCase()}</Text>
+                          <Text style={styles.componentLabel}>{obj.label}</Text>
                         </View>
                       </View>
-                      
-                      <View style={styles.propertyItem}>
-                        <Text style={styles.modalLabel}>Label</Text>
-                        <Text style={styles.modalValue}>{obj.label}</Text>
-                      </View>
-                    {/* Show bin capacity details if this is a bin */}
-                    {obj.type === 'bin' && (() => {
-                      // Find parent shelf, aisle, zone in layout
-                      // Identify the topmost shelf under the bin with stacking support
-                      const binBottomY = obj.position.y - obj.size.y / 2;
-                      const shelfCandidates = objectsRef.current.filter(o => o.type === 'shelf' &&
-                        Math.abs(o.position.x - obj.position.x) <= (o.size.x / 2 + obj.size.x / 2) &&
-                        Math.abs(o.position.z - obj.position.z) <= (o.size.z / 2 + obj.size.z / 2) &&
-                        (o.position.y + o.size.y / 2) <= binBottomY + 0.001
-                      );
-                      const shelfObj = shelfCandidates.length > 0
-                        ? shelfCandidates.reduce((prev, curr) => {
-                            const prevTop = prev.position.y + prev.size.y / 2;
-                            const currTop = curr.position.y + curr.size.y / 2;
-                            return currTop > prevTop ? curr : prev;
-                          }, shelfCandidates[0])
-                        : undefined;
-                      const aisleObj = objectsRef.current.find(o => o.type === 'aisle'
-                        && Math.abs(o.position.x - obj.position.x) <= o.size.x / 2
-                        && Math.abs(o.position.z - obj.position.z) <= o.size.z / 2);
-                      const zoneObj = objectsRef.current.find(o => o.type === 'zone'
-                        && Math.abs(o.position.x - obj.position.x) <= o.size.x / 2
-                        && Math.abs(o.position.z - obj.position.z) <= o.size.z / 2);
-                      const shelfLabel = shelfObj?.label;
-                      const aisleLabel = aisleObj?.label;
-                      const zoneLabel = zoneObj?.label;
-                      // Lookup matching warehouse item
-                      const heatmapItem = warehouseItemsList.find(i => {
-                        const loc = i.Location;
-                        return loc
-                          && loc.bin === obj.label
-                          && loc.shelf === shelfLabel
-                          && loc.aisle === aisleLabel
-                          && loc.zone === zoneLabel;
-                      });
-                      if (!heatmapItem) return null;
-                      const pctUsed = (heatmapItem.quantity / heatmapItem.maxThreshold) * 100;
-                      return (
-                        <>
-                          <View style={styles.propertyItem}>
-                            <Text style={styles.modalLabel}>Item</Text>
-                            <View style={styles.propertyValueContainer}>
-                              <MaterialCommunityIcons name="package-variant-closed" size={16} color="#007AFF" />
-                              <Text style={styles.modalValue}>{heatmapItem.InventoryItem.name}</Text>
+
+                      {/* Location Hierarchy for Bins */}
+                      {obj.type === 'bin' && binData?.Location && (
+                        <View style={styles.locationSection}>
+                          <Text style={styles.sectionTitle}>Location</Text>
+                          <View style={styles.locationHierarchy}>
+                            <View style={styles.locationItem}>
+                              <MaterialCommunityIcons name="map-marker" size={16} color="#8E8E93" />
+                              <Text style={styles.locationText}>
+                                {[binData.Location.zone, binData.Location.rack, binData.Location.shelf, binData.Location.bin]
+                                  .filter(Boolean)
+                                  .join(' > ')}
+                              </Text>
                             </View>
                           </View>
+                        </View>
+                      )}
+
+                      {/* Bin Capacity & Items */}
+                      {obj.type === 'bin' && binData && (
+                        <View style={styles.capacitySection}>
+                          <Text style={styles.sectionTitle}>Capacity & Stock</Text>
                           
-                          <View style={styles.propertyItem}>
-                            <Text style={styles.modalLabel}>Current Stock</Text>
-                            <View style={styles.propertyValueContainer}>
-                              <MaterialCommunityIcons name="counter" size={16} color="#34C759" />
-                              <Text style={styles.modalValue}>{heatmapItem.quantity}</Text>
+                          {/* Item Information */}
+                          {binData.InventoryItem && (
+                            <View style={styles.itemCard}>
+                              <View style={styles.itemHeader}>
+                                <MaterialCommunityIcons name="package-variant-closed" size={20} color="#007AFF" />
+                                <Text style={styles.itemName}>{binData.InventoryItem.name}</Text>
+                              </View>
+                              {binData.InventoryItem.sku && (
+                                <Text style={styles.itemSku}>SKU: {binData.InventoryItem.sku}</Text>
+                              )}
+                            </View>
+                          )}
+
+                          {/* Stock Information */}
+                          <View style={styles.stockGrid}>
+                            <View style={styles.stockItem}>
+                              <Text style={styles.stockLabel}>Current Stock</Text>
+                              <Text style={styles.stockValue}>{binData.quantity || 0}</Text>
+                            </View>
+                            <View style={styles.stockItem}>
+                              <Text style={styles.stockLabel}>Max Capacity</Text>
+                              <Text style={styles.stockValue}>{binData.maxThreshold || 0}</Text>
                             </View>
                           </View>
-                          
-                          <View style={styles.propertyItem}>
-                            <Text style={styles.modalLabel}>Max Capacity</Text>
-                            <View style={styles.propertyValueContainer}>
-                              <MaterialCommunityIcons name="gauge-full" size={16} color="#8E8E93" />
-                              <Text style={styles.modalValue}>{heatmapItem.maxThreshold}</Text>
-                            </View>
-                          </View>
-                          
-                          <View style={styles.propertyItem}>
-                            <Text style={styles.modalLabel}>Utilization</Text>
-                            <View style={styles.utilizationContainer}>
+
+                          {/* Utilization Bar */}
+                          {binData.maxThreshold > 0 && (
+                            <View style={styles.utilizationSection}>
+                              <View style={styles.utilizationHeader}>
+                                <Text style={styles.utilizationLabel}>Utilization</Text>
+                                <Text style={styles.utilizationPercentage}>
+                                  {((binData.quantity / binData.maxThreshold) * 100).toFixed(1)}%
+                                </Text>
+                              </View>
                               <View style={styles.utilizationBar}>
                                 <View style={[
                                   styles.utilizationFill, 
                                   { 
-                                    width: `${Math.min(pctUsed, 100)}%`,
-                                    backgroundColor: pctUsed > 80 ? '#FF453A' : pctUsed > 50 ? '#FFD60A' : '#34C759'
+                                    width: `${Math.min((binData.quantity / binData.maxThreshold) * 100, 100)}%`,
+                                    backgroundColor: (binData.quantity / binData.maxThreshold) > 0.8 ? '#FF453A' : 
+                                                    (binData.quantity / binData.maxThreshold) > 0.5 ? '#FFD60A' : '#34C759'
                                   }
                                 ]} />
                               </View>
-                              <Text style={[styles.modalValue, { 
-                                color: pctUsed > 80 ? '#FF453A' : '#1C1C1E',
-                                fontWeight: '600'
-                              }]}>
-                                {`${pctUsed.toFixed(1)}%`}
-                              </Text>
                             </View>
-                          </View>
-                        </>
-                      );
-                    })()}
+                          )}
+                        </View>
+                      )}
                     </View>
                   );
                 })()}
-            </ScrollView>
-            
-            <View style={styles.modalFooter}>
-              <TouchableOpacity 
-                style={styles.modalButton}
-                onPress={() => setShowProperties(false)}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.modalButtonText}>Close</Text>
-              </TouchableOpacity>
-            </View>
-          </KeyboardAvoidingView>
+              </ScrollView>
+              
+              <View style={styles.modalFooter}>
+                <TouchableOpacity 
+                  style={styles.modalButton}
+                  onPress={() => setShowProperties(false)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.modalButtonText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </KeyboardAvoidingView>
+          </SafeAreaView>
         </View>
       </Modal>
 
@@ -926,6 +1137,113 @@ export default function Warehouse3DHeatmapView() {
           />
         </TouchableOpacity>
       </Animated.View>
+
+      {/* Layout Picker Modal */}
+      <Modal
+        visible={showLayoutPicker}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <SafeAreaView style={styles.modalContainer}>
+                     <View style={styles.modalHeader}>
+             <Text style={styles.modalTitle}>Select Warehouse Layout</Text>
+             <View style={styles.modalHeaderActions}>
+               <TouchableOpacity 
+                 onPress={loadSavedLayouts}
+                 style={styles.modalActionButton}
+                 disabled={loadingLayouts}
+               >
+                 <MaterialCommunityIcons 
+                   name="refresh" 
+                   size={20} 
+                   color={loadingLayouts ? "#8E8E93" : "#007AFF"} 
+                 />
+               </TouchableOpacity>
+               <TouchableOpacity 
+                 onPress={() => setShowLayoutPicker(false)}
+                 style={styles.modalCloseButton}
+               >
+                 <MaterialCommunityIcons name="close" size={24} color="#666" />
+               </TouchableOpacity>
+             </View>
+           </View>
+
+          <ScrollView style={styles.modalContent}>
+            {loadingLayouts ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#007AFF" />
+                <Text style={styles.loadingText}>Loading layouts...</Text>
+              </View>
+            ) : savedLayouts.length === 0 ? (
+              <View style={styles.emptyStateContainer}>
+                <MaterialCommunityIcons name="floor-plan" size={64} color="#8E8E93" />
+                <Text style={styles.emptyStateTitle}>No Saved Layouts</Text>
+                <Text style={styles.emptyStateSubtitle}>
+                  Create warehouse layouts in the 2D Builder to view them in the heatmap.
+                </Text>
+                                 <TouchableOpacity 
+                   style={styles.primaryButton}
+                   onPress={() => {
+                     setShowLayoutPicker(false);
+                     if (navigation) {
+                       navigation.navigate('Warehouse2DBuilder');
+                     }
+                   }}
+                 >
+                  <Text style={styles.primaryButtonText}>Create Layout</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.layoutGrid}>
+                {savedLayouts.map((layout) => (
+                  <TouchableOpacity
+                    key={layout.id}
+                    style={[
+                      styles.layoutCard,
+                      currentLayoutId === layout.id && styles.layoutCardSelected
+                    ]}
+                    onPress={() => handleLayoutSelection(layout.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.layoutCardHeader}>
+                      <MaterialCommunityIcons 
+                        name={layout.type === 'blueprint' ? 'floor-plan' : 'cube-outline'} 
+                        size={24} 
+                        color={currentLayoutId === layout.id ? '#007AFF' : '#8E8E93'} 
+                      />
+                      <Text style={[
+                        styles.layoutCardTitle,
+                        currentLayoutId === layout.id && styles.layoutCardTitleSelected
+                      ]}>
+                        {layout.name}
+                      </Text>
+                    </View>
+                    
+                    <Text style={styles.layoutCardSubtitle}>
+                      {layout.warehouseName}
+                    </Text>
+                    
+                    <View style={styles.layoutCardFooter}>
+                      <Text style={styles.layoutCardMeta}>
+                        {layout.type === 'blueprint' ? 'Server Blueprint' : 'Local Layout'}
+                      </Text>
+                      <Text style={styles.layoutCardDate}>
+                        {new Date(layout.lastModified).toLocaleDateString()}
+                      </Text>
+                    </View>
+                    
+                    {currentLayoutId === layout.id && (
+                      <View style={styles.layoutCardCheckmark}>
+                        <MaterialCommunityIcons name="check-circle" size={20} color="#34C759" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </View>
   );
 }
@@ -985,11 +1303,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  headerTitleContainer: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    marginLeft: 12,
+  },
   headerTitle: {
     fontSize: 20,
     fontWeight: '600',
     color: 'white',
-    marginLeft: 12,
+  },
+  layoutSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginTop: 4,
+    maxWidth: 200,
+  },
+  layoutSelectorText: {
+    fontSize: 14,
+    color: 'white',
+    marginRight: 4,
+    fontWeight: '500',
   },
   headerRight: {
     flexDirection: 'row',
@@ -1352,5 +1690,277 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     zIndex: 20,
+  },
+
+  // Layout Picker Modal
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'white',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5E7',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1C1C1E',
+  },
+  modalHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modalActionButton: {
+    padding: 8,
+    marginRight: 8,
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  emptyStateTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateSubtitle: {
+    fontSize: 16,
+    color: '#8E8E93',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 32,
+  },
+  primaryButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  primaryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'white',
+  },
+  layoutGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  layoutCard: {
+    width: '48%',
+    backgroundColor: '#F8F9FA',
+    padding: 16,
+    borderWidth: 2,
+    borderColor: '#E5E5E7',
+    borderRadius: 12,
+    marginBottom: 16,
+    position: 'relative',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  layoutCardSelected: {
+    borderColor: '#007AFF',
+    backgroundColor: '#F0F8FF',
+  },
+  layoutCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  layoutCardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginLeft: 8,
+    flex: 1,
+  },
+  layoutCardTitleSelected: {
+    color: '#007AFF',
+  },
+  layoutCardSubtitle: {
+    fontSize: 14,
+    color: '#8E8E93',
+    marginBottom: 12,
+    fontWeight: '500',
+  },
+  layoutCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  layoutCardMeta: {
+    fontSize: 12,
+    color: '#007AFF',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  layoutCardDate: {
+    fontSize: 12,
+    color: '#8E8E93',
+  },
+  layoutCardCheckmark: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  componentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E5EA',
+  },
+  componentIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#F2F2F7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  componentInfo: {
+    flex: 1,
+  },
+  componentType: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  componentLabel: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#1C1C1E',
+  },
+  locationSection: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 12,
+  },
+  locationHierarchy: {
+    backgroundColor: '#F2F2F7',
+    padding: 12,
+    borderRadius: 8,
+  },
+  locationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  locationText: {
+    fontSize: 14,
+    color: '#1C1C1E',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  capacitySection: {
+    marginBottom: 20,
+  },
+  itemCard: {
+    backgroundColor: '#F2F2F7',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  itemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  itemName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginLeft: 8,
+  },
+  itemSku: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginLeft: 28,
+  },
+  stockGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  stockItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  stockLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  stockValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1C1C1E',
+  },
+  utilizationSection: {
+    marginBottom: 16,
+  },
+  utilizationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  utilizationLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#8E8E93',
+  },
+  utilizationPercentage: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1C1E',
   },
 }); 

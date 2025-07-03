@@ -6,17 +6,20 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Picker } from '@react-native-picker/picker';
 import { AuthContext } from '../context/AuthContext';
 import { fetchWarehouses } from '../api/warehouses';
-import { createLocation } from '../api/locations';
+import { createLocation, fetchLocationHierarchy } from '../api/locations';
 import { SafeAreaView } from 'react-native';
 import InternalHeader from '../components/InternalHeader';
 import { fetchInventoryItems } from '../api/inventoryItems';
 import { createWarehouseItem } from '../api/warehouseItems';
+import { locationToBinMesh, BinEvents } from '../utils/binGeneration';
 
 function CreateLocationScreen({ navigation }) {
   const { userToken } = useContext(AuthContext);
   const [warehouses, setWarehouses] = useState([]);
   const [warehouseId, setWarehouseId] = useState('');
   const [zone, setZone] = useState('');
+  const [rack, setRack] = useState('');
+  const [aisle, setAisle] = useState('');
   const [shelf, setShelf] = useState('');
   const [bin, setBin] = useState('');
   const [x, setX] = useState('');
@@ -30,6 +33,16 @@ function CreateLocationScreen({ navigation }) {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
 
+  // Location hierarchy state
+  const [locationHierarchy, setLocationHierarchy] = useState({
+    zones: [],
+    racks: [],
+    aisles: [],
+    shelves: [],
+    bins: []
+  });
+  const [loadingHierarchy, setLoadingHierarchy] = useState(false);
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -39,7 +52,11 @@ function CreateLocationScreen({ navigation }) {
         ]);
         
         setWarehouses(wh);
-        if (wh.length) setWarehouseId(wh[0].id);
+        if (wh.length) {
+          setWarehouseId(wh[0].id);
+          // Load initial hierarchy for first warehouse
+          loadLocationHierarchy(wh[0].id);
+        }
         
         setInventoryItems(items);
         if (items.length) setItemId(items[0].id);
@@ -54,6 +71,83 @@ function CreateLocationScreen({ navigation }) {
     loadData();
   }, [userToken]);
 
+  // Load location hierarchy when warehouse changes
+  const loadLocationHierarchy = async (selectedWarehouseId, filters = {}) => {
+    if (!selectedWarehouseId) return;
+    
+    setLoadingHierarchy(true);
+    try {
+      console.log('Loading hierarchy for warehouse:', selectedWarehouseId, 'with filters:', filters);
+      const hierarchy = await fetchLocationHierarchy(userToken, selectedWarehouseId, filters);
+      console.log('Received hierarchy:', hierarchy);
+      setLocationHierarchy(hierarchy);
+    } catch (err) {
+      console.error('Error loading location hierarchy:', err);
+      Alert.alert('Error', 'Failed to load location options. Please try again.');
+    } finally {
+      setLoadingHierarchy(false);
+    }
+  };
+
+  // Handle warehouse selection change
+  const handleWarehouseChange = (selectedWarehouseId) => {
+    setWarehouseId(selectedWarehouseId);
+    // Reset all location fields
+    setZone('');
+    setRack('');
+    setAisle('');
+    setShelf('');
+    setBin('');
+    // Load new hierarchy
+    loadLocationHierarchy(selectedWarehouseId);
+  };
+
+  // Handle zone selection change
+  const handleZoneChange = (selectedZone) => {
+    setZone(selectedZone);
+    // Reset dependent fields
+    setRack('');
+    setAisle('');
+    setShelf('');
+    setBin('');
+    // Load filtered hierarchy
+    loadLocationHierarchy(warehouseId, { zone: selectedZone });
+  };
+
+  // Handle rack selection change
+  const handleRackChange = (selectedRack) => {
+    setRack(selectedRack);
+    // Reset dependent fields
+    setAisle('');
+    setShelf('');
+    setBin('');
+    // Load filtered hierarchy
+    loadLocationHierarchy(warehouseId, { zone, rack: selectedRack });
+  };
+
+  // Handle aisle selection change
+  const handleAisleChange = (selectedAisle) => {
+    setAisle(selectedAisle);
+    // Reset dependent fields
+    setShelf('');
+    setBin('');
+    // Load filtered hierarchy (aisle is optional, so it doesn't affect filtering much)
+    const filters = { zone, rack };
+    if (selectedAisle) filters.aisle = selectedAisle;
+    loadLocationHierarchy(warehouseId, filters);
+  };
+
+  // Handle shelf selection change
+  const handleShelfChange = (selectedShelf) => {
+    setShelf(selectedShelf);
+    // Reset dependent fields
+    setBin('');
+    // Load filtered hierarchy (aisle is optional)
+    const filters = { zone, rack, shelf: selectedShelf };
+    if (aisle) filters.aisle = aisle;
+    loadLocationHierarchy(warehouseId, filters);
+  };
+
   const validateForm = () => {
     const newErrors = {};
     
@@ -63,22 +157,14 @@ function CreateLocationScreen({ navigation }) {
     if (!zone.trim()) {
       newErrors.zone = 'Zone is required';
     }
+    if (!rack.trim()) {
+      newErrors.rack = 'Rack is required';
+    }
+    // Aisle is optional - no validation required
     if (!shelf.trim()) {
       newErrors.shelf = 'Shelf is required';
     }
-    if (!bin.trim()) {
-      newErrors.bin = 'Bin is required';
-    }
-    if (!x.trim()) {
-      newErrors.x = 'X coordinate is required';
-    } else if (isNaN(parseFloat(x))) {
-      newErrors.x = 'X coordinate must be a valid number';
-    }
-    if (!y.trim()) {
-      newErrors.y = 'Y coordinate is required';
-    } else if (isNaN(parseFloat(y))) {
-      newErrors.y = 'Y coordinate must be a valid number';
-    }
+    // Bin label optional - no validation required
     if (!itemId) {
       newErrors.item = 'Item selection is required';
     }
@@ -110,10 +196,10 @@ function CreateLocationScreen({ navigation }) {
       const newLoc = await createLocation(userToken, { 
         warehouseId, 
         zone: zone.trim(), 
+        rack: rack.trim(),
+        aisle: aisle.trim() || null, // Optional field
         shelf: shelf.trim(), 
-        bin: bin.trim(), 
-        x: parseFloat(x), 
-        y: parseFloat(y) 
+        bin: bin.trim() || null // Optional label
       });
       
       await createWarehouseItem(userToken, {
@@ -123,13 +209,43 @@ function CreateLocationScreen({ navigation }) {
         quantity: parseInt(quantity, 10),
         maxThreshold: parseInt(maxThreshold, 10)
       });
+
+      // Generate 3D bin mesh data with new bin flag
+      const newBinMesh = locationToBinMesh(newLoc, { 
+        metadata: { 
+          isNewBin: true, // Flag to highlight new bins
+          warehouseId: warehouseId // Include warehouse ID for filtering
+        } 
+      });
+      
+      console.log('🔔 About to emit bin created event:', {
+        binId: newBinMesh.id,
+        warehouseId: warehouseId,
+        label: newBinMesh.label
+      });
+      
+      // Emit bin creation event
+      BinEvents.emitBinCreated(newBinMesh);
       
       Alert.alert(
         'Success',
         'Location and inventory item created successfully!',
         [
           {
-            text: 'OK',
+            text: 'View in 3D',
+            onPress: () => {
+              // Navigate to 3D view with the new bin highlighted
+              navigation.navigate('Warehouse3DView', {
+                warehouseId: warehouseId,
+                preloadedObjects: [newBinMesh],
+                fromNewBin: true,
+                newBinId: newBinMesh.id
+              });
+            }
+          },
+          {
+            text: 'Stay Here',
+            style: 'cancel',
             onPress: () => navigation.goBack()
           }
         ]
@@ -194,7 +310,7 @@ function CreateLocationScreen({ navigation }) {
                 <Picker
                   selectedValue={warehouseId}
                   onValueChange={(value) => {
-                    setWarehouseId(value);
+                    handleWarehouseChange(value);
                     if (errors.warehouse) setErrors(prev => ({ ...prev, warehouse: null }));
                   }}
                   style={styles.picker}
@@ -228,109 +344,106 @@ function CreateLocationScreen({ navigation }) {
               <Text style={styles.label}>
                 Zone <Text style={styles.required}>*</Text>
               </Text>
-              <TextInput 
-                style={[styles.input, errors.zone && styles.inputError]} 
-                value={zone} 
-                onChangeText={(text) => {
-                  setZone(text);
-                  if (errors.zone) setErrors(prev => ({ ...prev, zone: null }));
-                }}
-                placeholder="e.g. A, B, C"
-                placeholderTextColor="#8E8E93"
-                autoCapitalize="characters"
-              />
+              <View style={[styles.pickerContainer, errors.zone && styles.inputError]}>
+                                 <Picker
+                   selectedValue={zone}
+                   onValueChange={(value) => {
+                     handleZoneChange(value);
+                     if (errors.zone) setErrors(prev => ({ ...prev, zone: null }));
+                   }}
+                   style={styles.picker}
+                 >
+                   <Picker.Item label="Select a zone..." value="" />
+                   {locationHierarchy.zones.map((z) => (
+                     <Picker.Item key={z} label={z} value={z} />
+                   ))}
+                 </Picker>
+              </View>
               {errors.zone && <Text style={styles.errorText}>{errors.zone}</Text>}
             </View>
             
             <View style={styles.formGroup}>
               <Text style={styles.label}>
+                Rack <Text style={styles.required}>*</Text>
+              </Text>
+              <View style={[styles.pickerContainer, errors.rack && styles.inputError]}>
+                                 <Picker
+                   selectedValue={rack}
+                   onValueChange={(value) => {
+                     handleRackChange(value);
+                     if (errors.rack) setErrors(prev => ({ ...prev, rack: null }));
+                   }}
+                   style={styles.picker}
+                   enabled={!!zone}
+                 >
+                   <Picker.Item label={zone ? "Select a rack..." : "Select zone first"} value="" />
+                   {locationHierarchy.racks.map((r) => (
+                     <Picker.Item key={r} label={r} value={r} />
+                   ))}
+                 </Picker>
+              </View>
+              {errors.rack && <Text style={styles.errorText}>{errors.rack}</Text>}
+            </View>
+            
+                         <View style={styles.formGroup}>
+               <Text style={styles.label}>
+                 Aisle <Text style={styles.optional}>(Optional)</Text>
+               </Text>
+              <View style={[styles.pickerContainer, errors.aisle && styles.inputError]}>
+                                 <Picker
+                   selectedValue={aisle}
+                   onValueChange={(value) => {
+                     handleAisleChange(value);
+                     if (errors.aisle) setErrors(prev => ({ ...prev, aisle: null }));
+                   }}
+                   style={styles.picker}
+                   enabled={!!rack}
+                 >
+                   <Picker.Item label={rack ? "Select an aisle (optional)..." : "Select rack first"} value="" />
+                   {locationHierarchy.aisles.map((a) => (
+                     <Picker.Item key={a} label={a} value={a} />
+                   ))}
+                 </Picker>
+              </View>
+              {errors.aisle && <Text style={styles.errorText}>{errors.aisle}</Text>}
+            </View>
+            
+            {/* Shelf Picker */}
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>
                 Shelf <Text style={styles.required}>*</Text>
               </Text>
-              <TextInput 
-                style={[styles.input, errors.shelf && styles.inputError]} 
-                value={shelf} 
-                onChangeText={(text) => {
-                  setShelf(text);
-                  if (errors.shelf) setErrors(prev => ({ ...prev, shelf: null }));
-                }}
-                placeholder="e.g. 01, 02, 03"
-                placeholderTextColor="#8E8E93"
-              />
+              <View style={[styles.pickerContainer, errors.shelf && styles.inputError]}>
+                <Picker
+                  selectedValue={shelf}
+                  onValueChange={value => {
+                    handleShelfChange(value);
+                    if (errors.shelf) setErrors(prev => ({ ...prev, shelf: null }));
+                  }}
+                  enabled={!!rack}
+                  style={styles.picker}
+                >
+                  <Picker.Item label={rack ? "Select a shelf..." : "Select rack first"} value="" />
+                  {locationHierarchy.shelves.map(s => (
+                    <Picker.Item key={s} label={s} value={s} />
+                  ))}
+                </Picker>
+              </View>
               {errors.shelf && <Text style={styles.errorText}>{errors.shelf}</Text>}
             </View>
             
+            {/* Bin Label Input (optional) */}
             <View style={styles.formGroup}>
-              <Text style={styles.label}>
-                Bin <Text style={styles.required}>*</Text>
-              </Text>
-              <TextInput 
-                style={[styles.input, errors.bin && styles.inputError]} 
-                value={bin} 
-                onChangeText={(text) => {
-                  setBin(text);
-                  if (errors.bin) setErrors(prev => ({ ...prev, bin: null }));
-                }}
-                placeholder="e.g. A, B, C"
+              <Text style={styles.label}>Bin Label (optional)</Text>
+              <TextInput
+                style={styles.input}
+                value={bin}
+                onChangeText={text => setBin(text)}
+                placeholder="Enter bin label"
                 placeholderTextColor="#8E8E93"
-                autoCapitalize="characters"
+                // no validation error display, label is optional
               />
-              {errors.bin && <Text style={styles.errorText}>{errors.bin}</Text>}
             </View>
-          </View>
-
-          {/* Coordinates */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <MaterialCommunityIcons name="crosshairs-gps" size={20} color="#5856D6" />
-              <Text style={styles.cardTitle}>Coordinates</Text>
-            </View>
-            
-            <View style={styles.coordinatesContainer}>
-              <View style={styles.coordinateInput}>
-                <Text style={styles.label}>
-                  X Position <Text style={styles.required}>*</Text>
-                </Text>
-                <TextInput 
-                  style={[styles.input, errors.x && styles.inputError]} 
-                  value={x} 
-                  onChangeText={(text) => {
-                    setX(text);
-                    if (errors.x) setErrors(prev => ({ ...prev, x: null }));
-                  }}
-                  placeholder="0.0"
-                  placeholderTextColor="#8E8E93"
-                  keyboardType="numeric"
-                />
-                {errors.x && <Text style={styles.errorText}>{errors.x}</Text>}
-              </View>
-              
-              <View style={styles.coordinateInput}>
-                <Text style={styles.label}>
-                  Y Position <Text style={styles.required}>*</Text>
-                </Text>
-                <TextInput 
-                  style={[styles.input, errors.y && styles.inputError]} 
-                  value={y} 
-                  onChangeText={(text) => {
-                    setY(text);
-                    if (errors.y) setErrors(prev => ({ ...prev, y: null }));
-                  }}
-                  placeholder="0.0"
-                  placeholderTextColor="#8E8E93"
-                  keyboardType="numeric"
-                />
-                {errors.y && <Text style={styles.errorText}>{errors.y}</Text>}
-              </View>
-            </View>
-            
-            {x && y && !errors.x && !errors.y && (
-              <View style={styles.coordinatePreview}>
-                <MaterialCommunityIcons name="map-marker" size={16} color="#5856D6" />
-                <Text style={styles.coordinateText}>
-                  Position: ({parseFloat(x).toFixed(1)}, {parseFloat(y).toFixed(1)})
-                </Text>
-              </View>
-            )}
           </View>
 
           {/* Initial Inventory */}
@@ -568,6 +681,11 @@ const styles = StyleSheet.create({
   required: {
     color: '#FF3B30',
   },
+  optional: {
+    color: '#8E8E93',
+    fontSize: 14,
+    fontWeight: '400',
+  },
   
   input: {
     backgroundColor: '#F8F9FA',
@@ -628,30 +746,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     backgroundColor: '#F8F9FA',
     borderRadius: 12,
-  },
-  
-  // Coordinates Section
-  coordinatesContainer: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  
-  coordinateInput: {
-    flex: 1,
-  },
-  
-  coordinatePreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 12,
-    paddingHorizontal: 4,
-  },
-  
-  coordinateText: {
-    fontSize: 14,
-    color: '#5856D6',
-    fontWeight: '500',
-    marginLeft: 6,
   },
   
   // Inventory Section

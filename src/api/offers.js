@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
+import { getApiUrl } from '../utils/apiHost';
 
-const API_URL = Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.73:3000';
+const API_URL = getApiUrl();
 
 /**
  * Create a new offer for a route and transporter
@@ -56,4 +57,9 @@ export async function updateOffer(token, offerId, status) {
     throw new Error(`Error updating offer: ${res.status}`);
   }
   return res.json();
+}
+
+// Offers API functions
+export const getOffers = async () => {
+  // ... existing code ...
 } 

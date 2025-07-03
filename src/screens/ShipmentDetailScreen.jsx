@@ -12,11 +12,12 @@ import InternalHeader from '../components/InternalHeader';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { getApiUrl } from '../utils/apiHost';
 
 // Use emulator-friendly host on Android for static image fetching
 const API_URL = Platform.OS === 'android'
   ? 'http://10.0.2.2:3000'
-  : (Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.73:3000');
+  : (Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || getApiUrl());
 
 const statusLabelMap = { 
   CREATED: 'Processing', 

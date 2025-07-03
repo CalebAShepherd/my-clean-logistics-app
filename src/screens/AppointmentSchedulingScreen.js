@@ -19,9 +19,10 @@ import { AuthContext } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { hasAppointmentScheduling } from '../utils/featureFlags';
 import InternalHeader from '../components/InternalHeader';
+import { getApiUrl } from '../utils/apiHost';
 
-const localhost = Platform.OS === 'android' ? '10.0.2.2' : '192.168.0.73';
-const API_URL = `http://${localhost}:3000`;
+
+const API_URL = getApiUrl();
 
 const AppointmentSchedulingScreen = ({ navigation }) => {
   const { userToken } = useContext(AuthContext);

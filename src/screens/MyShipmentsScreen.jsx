@@ -7,8 +7,9 @@ import { useSettings } from '../context/SettingsContext';
 import InternalHeader from '../components/InternalHeader';
 import Constants from 'expo-constants';
 import { useNavigation } from '@react-navigation/native';
+import { getApiUrl } from '../utils/apiHost';
 
-const API_URL = Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.73:3000';
+const API_URL = Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || getApiUrl();
 
 // Enhanced status configuration
 const STATUS_CONFIG = {

@@ -312,9 +312,9 @@ function AdminDashboardScreen({ navigation }) {
             </View>
           </View>
 
-          {/* Management Actions */}
+          {/* Operations Management */}
           <View style={styles.actionsContainer}>
-            <Text style={styles.sectionTitle}>Management</Text>
+            <Text style={styles.sectionTitle}>Operations Management</Text>
             <View style={styles.actionsCard}>
               <LinearGradient
                 colors={['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.85)']}
@@ -325,14 +325,6 @@ function AdminDashboardScreen({ navigation }) {
                     <MaterialCommunityIcons name="package-variant" size={24} color="#007AFF" />
                   </View>
                   <Text style={styles.actionText}>View Shipments</Text>
-                  <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('User Management')} activeOpacity={0.7}>
-                  <View style={styles.actionIconContainer}>
-                    <MaterialCommunityIcons name="account-group" size={24} color="#34C759" />
-                  </View>
-                  <Text style={styles.actionText}>Manage Users</Text>
                   <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
                 </TouchableOpacity>
 
@@ -347,7 +339,7 @@ function AdminDashboardScreen({ navigation }) {
                 )}
 
                 {settings.ownTransporters && (
-                  <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('Transport Management')} activeOpacity={0.7}>
+                  <TouchableOpacity style={[styles.actionItem, !settings.useThirdPartyCarriers && styles.lastActionItem]} onPress={() => navigation.navigate('Transport Management')} activeOpacity={0.7}>
                     <View style={styles.actionIconContainer}>
                       <MaterialCommunityIcons name="truck-delivery" size={24} color="#8E2DE2" />
                     </View>
@@ -355,12 +347,104 @@ function AdminDashboardScreen({ navigation }) {
                     <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
                   </TouchableOpacity>
                 )}
+              </LinearGradient>
+            </View>
+          </View>
 
-                <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('Analytics')} activeOpacity={0.7}>
+          {/* Asset & Facility Management */}
+          <View style={styles.actionsContainer}>
+            <Text style={styles.sectionTitle}>Asset & Facility Management</Text>
+            <View style={styles.actionsCard}>
+              <LinearGradient
+                colors={['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.85)']}
+                style={styles.actionsCardGradient}
+              >
+                <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('AssetManagement')} activeOpacity={0.7}>
+                  <View style={styles.actionIconContainer}>
+                    <MaterialCommunityIcons name="wrench" size={24} color="#FF6B35" />
+                  </View>
+                  <Text style={styles.actionText}>Asset Management</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.actionItem, styles.lastActionItem]} onPress={() => navigation.navigate('FacilityManagement')} activeOpacity={0.7}>
+                  <View style={styles.actionIconContainer}>
+                    <MaterialCommunityIcons name="factory" size={24} color="#32D74B" />
+                  </View>
+                  <Text style={styles.actionText}>Facility Management</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                </TouchableOpacity>
+              </LinearGradient>
+            </View>
+          </View>
+
+          {/* Financial Management */}
+          <View style={styles.actionsContainer}>
+            <Text style={styles.sectionTitle}>Financial Management</Text>
+            <View style={styles.actionsCard}>
+              <LinearGradient
+                colors={['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.85)']}
+                style={styles.actionsCardGradient}
+              >
+                <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('ERPFinancialDashboard')} activeOpacity={0.7}>
+                  <View style={styles.actionIconContainer}>
+                    <MaterialCommunityIcons name="finance" size={24} color="#00C7BE" />
+                  </View>
+                  <Text style={styles.actionText}>Financial Dashboard</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.actionItem, styles.lastActionItem]} onPress={() => navigation.navigate('ProcurementAnalytics')} activeOpacity={0.7}>
+                  <View style={styles.actionIconContainer}>
+                    <MaterialCommunityIcons name="clipboard-text" size={24} color="#AF52DE" />
+                  </View>
+                  <Text style={styles.actionText}>Procurement</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                </TouchableOpacity>
+              </LinearGradient>
+            </View>
+          </View>
+
+          {/* Analytics & Reporting */}
+          <View style={styles.actionsContainer}>
+            <Text style={styles.sectionTitle}>Analytics & Reporting</Text>
+            <View style={styles.actionsCard}>
+              <LinearGradient
+                colors={['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.85)']}
+                style={styles.actionsCardGradient}
+              >
+                <TouchableOpacity style={[styles.actionItem, styles.lastActionItem]} onPress={() => navigation.navigate('Analytics')} activeOpacity={0.7}>
                   <View style={styles.actionIconContainer}>
                     <MaterialCommunityIcons name="chart-line" size={24} color="#FF3B30" />
                   </View>
-                  <Text style={styles.actionText}>Analytics</Text>
+                  <Text style={styles.actionText}>Analytics Dashboard</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                </TouchableOpacity>
+              </LinearGradient>
+            </View>
+          </View>
+
+          {/* System Administration */}
+          <View style={styles.actionsContainer}>
+            <Text style={styles.sectionTitle}>System Administration</Text>
+            <View style={styles.actionsCard}>
+              <LinearGradient
+                colors={['rgba(255, 255, 255, 0.95)', 'rgba(255, 255, 255, 0.85)']}
+                style={styles.actionsCardGradient}
+              >
+                <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('User Management')} activeOpacity={0.7}>
+                  <View style={styles.actionIconContainer}>
+                    <MaterialCommunityIcons name="account-group" size={24} color="#34C759" />
+                  </View>
+                  <Text style={styles.actionText}>Manage Users</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('AuditTrail')} activeOpacity={0.7}>
+                  <View style={styles.actionIconContainer}>
+                    <MaterialCommunityIcons name="file-document-outline" size={24} color="#FF9500" />
+                  </View>
+                  <Text style={styles.actionText}>Audit Logs</Text>
                   <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
                 </TouchableOpacity>
 
@@ -374,6 +458,80 @@ function AdminDashboardScreen({ navigation }) {
               </LinearGradient>
             </View>
           </View>
+
+          {/* Compliance & Risk Management */}
+          <View style={styles.actionsContainer}>
+            <Text style={styles.sectionTitle}>Compliance & Risk Management</Text>
+            <View style={styles.actionsCard}>
+              <LinearGradient colors={['rgba(255,255,255,0.95)','rgba(255,255,255,0.85)']} style={styles.actionsCardGradient}>
+                <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('ComplianceDashboard')} activeOpacity={0.7}>
+                  <View style={styles.actionIconContainer}>
+                    <MaterialCommunityIcons name="view-dashboard" size={24} color="#667eea" />
+                  </View>
+                  <Text style={styles.actionText}>Compliance Dashboard</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('DocumentManagement')} activeOpacity={0.7}>
+                  <View style={styles.actionIconContainer}>
+                    <MaterialCommunityIcons name="file-document-multiple" size={24} color="#27ae60" />
+                  </View>
+                  <Text style={styles.actionText}>Document Management</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('RiskAssessment')} activeOpacity={0.7}>
+                  <View style={styles.actionIconContainer}>
+                    <MaterialCommunityIcons name="alert-circle" size={24} color="#e74c3c" />
+                  </View>
+                  <Text style={styles.actionText}>Risk Assessment</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('ComplianceReports')} activeOpacity={0.7}>
+                  <View style={styles.actionIconContainer}>
+                    <MaterialCommunityIcons name="file-chart" size={24} color="#f39c12" />
+                  </View>
+                  <Text style={styles.actionText}>Compliance Reports</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('SoxControls')} activeOpacity={0.7}>
+                  <View style={styles.actionIconContainer}>
+                    <MaterialCommunityIcons name="shield-check" size={24} color="#007AFF" />
+                  </View>
+                  <Text style={styles.actionText}>SOX Controls</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionItem} onPress={() => navigation.navigate('SoxTests')} activeOpacity={0.7}>
+                  <View style={styles.actionIconContainer}>
+                    <MaterialCommunityIcons name="clipboard-check-multiple" size={24} color="#34C759" />
+                  </View>
+                  <Text style={styles.actionText}>SOX Tests</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionItem, styles.lastActionItem]} onPress={() => navigation.navigate('InsuranceClaims')} activeOpacity={0.7}>
+                  <View style={styles.actionIconContainer}>
+                    <MaterialCommunityIcons name="file-document" size={24} color="#FF9500" />
+                  </View>
+                  <Text style={styles.actionText}>Insurance Claims</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                </TouchableOpacity>
+              </LinearGradient>
+            </View>
+          </View>
+
+          {/* Integration & Optimization */}
+          {/* <View style={styles.actionsContainer}>
+            <Text style={styles.sectionTitle}>Integration & Optimization</Text>
+            <View style={styles.actionsCard}>
+              <LinearGradient colors={['rgba(255,255,255,0.95)','rgba(255,255,255,0.85)']} style={styles.actionsCardGradient}>
+                <TouchableOpacity style={[styles.actionItem, styles.lastActionItem]} onPress={() => navigation.navigate('IntegrationDashboard')} activeOpacity={0.7}>
+                  <View style={styles.actionIconContainer}>
+                    <MaterialCommunityIcons name="chart-timeline-variant" size={24} color="#007AFF" />
+                  </View>
+                  <Text style={styles.actionText}>Integration Dashboard</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color="#8E8E93" />
+                </TouchableOpacity>
+              </LinearGradient>
+            </View>
+          </View> */}
         </ScrollView>
       </SafeAreaView>
     </LinearGradient>

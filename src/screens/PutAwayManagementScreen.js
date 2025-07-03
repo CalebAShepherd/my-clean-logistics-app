@@ -20,12 +20,11 @@ import { AuthContext } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { hasPutAwayOperations } from '../utils/featureFlags';
 import InternalHeader from '../components/InternalHeader';
+import { getWarehouseWorkers } from '../api/cycleCounting';
+import { getApiUrl } from '../utils/apiHost';
 
-const localhost = Platform.OS === 'android' ? '10.0.2.2' : '192.168.0.73';
-const API_URL =
-  Constants.manifest?.extra?.apiUrl ||
-  Constants.expoConfig?.extra?.apiUrl ||
-  `http://${localhost}:3000`;
+
+const API_URL = getApiUrl();
 
 const PutAwayManagementScreen = ({ navigation }) => {
   const { userToken } = useContext(AuthContext);
@@ -72,12 +71,13 @@ const PutAwayManagementScreen = ({ navigation }) => {
   };
 
   const loadWorkers = async () => {
+    if (!selectedWarehouse) {
+      return;
+    }
+    
     try {
-      const response = await fetch(`${API_URL}/users?role=WAREHOUSE_WORKER`, {
-        headers: { Authorization: `Bearer ${userToken}` }
-      });
-      const data = await response.json();
-      setWorkers(data);
+      const workers = await getWarehouseWorkers(userToken, selectedWarehouse);
+      setWorkers(workers);
     } catch (error) {
       console.error('Error loading workers:', error);
     }

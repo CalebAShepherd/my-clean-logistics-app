@@ -17,9 +17,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { AuthContext } from '../context/AuthContext';
 import InternalHeader from '../components/InternalHeader';
+import { getApiUrl } from '../utils/apiHost';
 
-const localhost = Platform.OS === 'android' ? '10.0.2.2' : '192.168.0.73';
-const API_URL = Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || `http://${localhost}:3000`;
+
+const API_URL = getApiUrl();
 // Optional date time picker - will gracefully handle if not available
 let DateTimePicker;
 try {

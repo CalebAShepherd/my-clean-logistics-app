@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const requireAuth = require('../middleware/requireAuth');
+const { captureInventoryReceived } = require('../middleware/integrationMiddleware');
 const {
   getReceipts,
   getReceiptById,
@@ -20,7 +21,7 @@ router.get('/', getReceipts);                        // GET /receiving - Get all
 router.get('/stats/:warehouseId', getReceivingStats); // GET /receiving/stats/:warehouseId - Get receiving statistics
 router.get('/:id', getReceiptById);                  // GET /receiving/:id - Get single receipt
 router.post('/', createReceipt);                     // POST /receiving - Create new receipt
-router.put('/:id/complete', completeReceipt);        // PUT /receiving/:id/complete - Complete receipt
+router.put('/:id/complete', captureInventoryReceived, completeReceipt);        // PUT /receiving/:id/complete - Complete receipt
 router.put('/:id/qc', performQC);                    // PUT /receiving/:id/qc - Perform QC check
 router.put('/:id/cancel', cancelReceipt);            // PUT /receiving/:id/cancel - Cancel receipt
 

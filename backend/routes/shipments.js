@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
+const { captureShipmentDelivery } = require('../middleware/integrationMiddleware');
 const shipmentController = require('../controllers/shipmentController');
 
 // Create a new shipment request (client)
@@ -51,6 +52,7 @@ router.put(
   '/:id/status',
   requireAuth,
   requireRole(['admin', 'dispatcher', 'transporter']),
+  captureShipmentDelivery,
   shipmentController.updateStatus
 );
 

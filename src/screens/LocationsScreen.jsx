@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { AuthContext } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import { fetchWarehouses } from '../api/warehouses';
-import { fetchLocations } from '../api/locations';
+import { fetchLocations, deleteAllLocations } from '../api/locations';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import InternalHeader from '../components/InternalHeader';
 
@@ -64,6 +64,29 @@ function LocationsScreen({ navigation }) {
     setRefreshing(true);
     await Promise.all([loadData(), loadLocations()]);
     setRefreshing(false);
+  };
+
+  const handleDeleteAll = () => {
+    Alert.alert(
+      'Confirm Delete',
+      'Are you sure you want to delete all locations?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: async () => {
+            setLoading(true);
+            try {
+              await deleteAllLocations(userToken);
+              await loadLocations();
+              Alert.alert('Success', 'All locations deleted');
+            } catch (err) {
+              console.error('Error deleting all locations:', err);
+              Alert.alert('Error', 'Failed to delete locations');
+            } finally {
+              setLoading(false);
+            }
+          } },
+      ]
+    );
   };
 
   useEffect(() => {
@@ -165,6 +188,34 @@ function LocationsScreen({ navigation }) {
           >
             <MaterialCommunityIcons name="plus-circle" size={20} color="white" />
             <Text style={styles.addLocationText}>Add New Location</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+        
+        {/* Quick 3D View Button */}
+        <TouchableOpacity 
+          style={styles.view3DButton} 
+          onPress={() => navigation.navigate('Warehouse3DView', { warehouseId: currentWarehouse })}
+          activeOpacity={0.8}
+        >
+          <LinearGradient
+            colors={['#34C759', '#30B857']}
+            style={styles.view3DGradient}
+          >
+            <MaterialCommunityIcons name="cube-outline" size={20} color="white" />
+            <Text style={styles.view3DText}>View in 3D</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.deleteAllButton} 
+          onPress={handleDeleteAll} 
+          activeOpacity={0.8}
+        >
+          <LinearGradient
+            colors={['#FF3B30', '#FF453A']}
+            style={styles.deleteAllGradient}
+          >
+            <MaterialCommunityIcons name="trash-can-outline" size={20} color="white" />
+            <Text style={styles.deleteAllText}>Delete All</Text>
           </LinearGradient>
         </TouchableOpacity>
       </View>
@@ -352,6 +403,52 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   addLocationText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  view3DButton: {
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: '#34C759',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    marginTop: 12,
+  },
+  view3DGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+  },
+  view3DText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  deleteAllButton: {
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: '#FF3B30',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    marginTop: 12,
+  },
+  deleteAllGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+  },
+  deleteAllText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '600',

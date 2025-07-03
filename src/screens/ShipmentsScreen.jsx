@@ -8,10 +8,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import InternalHeader from '../components/InternalHeader';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { getApiUrl } from '../utils/apiHost';
 
 const API_URL = Platform.OS === 'android'
   ? 'http://10.0.2.2:3000'
-  : 'http://192.168.0.73:3000';
+  : getApiUrl();
 
 function ShipmentList({ status, shipments, onRefresh, userToken, fetching, settings, searchQuery }) {
   const navigation = useNavigation();

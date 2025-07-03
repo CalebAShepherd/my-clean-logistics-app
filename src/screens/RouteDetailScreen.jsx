@@ -11,10 +11,11 @@ import { createOffer } from '../api/offers';
 import { createRoute } from '../api/routes';
 import InternalHeader from '../components/InternalHeader';
 import { LinearGradient } from 'expo-linear-gradient';
+import { getApiUrl } from '../utils/apiHost';
 
 const API_URL = Platform.OS === 'android'
   ? 'http://10.0.2.2:3000'
-  : Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.73:3000';
+  : Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || getApiUrl();
 
 function RouteDetailScreen({ route, navigation }) {
   // Expect either a persisted routeId or a computedRoute preview

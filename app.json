@@ -1,24 +1,29 @@
 {
   "expo": {
-    "name": "my-clean-logistics-app",
+    "name": "My Clean Logistics App",
     "slug": "my-clean-logistics-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "userInterfaceStyle": "light",
+    "scheme": "myapp",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.cashep.my-clean-logistics-app",
       "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to scan barcodes for warehouse operations.",
         "NSAppTransportSecurity": {
           "NSExceptionDomains": {
-            "192.168.0.73": {
+            "172.20.10.3": {
               "NSExceptionAllowsInsecureHTTPLoads": true,
               "NSIncludesSubdomains": true
             }
@@ -31,10 +36,26 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.cashep.mycleanlogisticsapp"
+      "package": "com.cashep.mycleanlogisticsapp",
+      "permissions": [
+        "CAMERA",
+        "android.permission.CAMERA"
+      ]
     },
+    "plugins": [
+      [
+        "expo-barcode-scanner",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to scan barcodes."
+        }
+      ]
+    ],
     "extra": {
-      "apiUrl": "http://192.168.0.73:3000"
+      "apiPort": 3000,
+      "apiHost": "172.20.10.3",
+      "eas": {
+        "projectId": "475e55d1-29b9-41c4-8623-043d21c2bdc8"
+      }
     },
     "web": {
       "favicon": "./assets/images/favicon.png"

@@ -7,10 +7,11 @@ import { Platform } from 'react-native';
 import InternalHeader from '../components/InternalHeader';
 import { fetchWarehouses } from '../api/warehouses';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { getApiUrl } from '../utils/apiHost';
 
 const API_URL = Platform.OS === 'android'
   ? 'http://10.0.2.2:3000'
-  : 'http://192.168.0.73:3000';
+  : getApiUrl();
 
 const ROLE_CONFIG = {
   admin: {

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const requireAuth = require('../middleware/requireAuth');
 const requireRole = require('../middleware/requireRole');
+const { captureStockMovement } = require('../middleware/integrationMiddleware');
 const stockMovementController = require('../controllers/stockMovementController');
 
 // List all stock movements
@@ -11,7 +12,7 @@ router.get('/', requireAuth, requireRole('admin'), stockMovementController.getSt
 router.get('/:id', requireAuth, requireRole('admin'), stockMovementController.getStockMovement);
 
 // Create a new stock movement record
-router.post('/', requireAuth, requireRole('admin'), stockMovementController.createStockMovement);
+router.post('/', requireAuth, requireRole('admin'), captureStockMovement, stockMovementController.createStockMovement);
 
 // Update an existing stock movement
 router.put('/:id', requireAuth, requireRole('admin'), stockMovementController.updateStockMovement);

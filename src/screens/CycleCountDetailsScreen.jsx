@@ -20,9 +20,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { AuthContext } from '../context/AuthContext';
 import InternalHeader from '../components/InternalHeader';
+import { getWarehouseWorkers, assignCycleCountTasks } from '../api/cycleCounting';
+import { getApiUrl } from '../utils/apiHost';
 
-const localhost = Platform.OS === 'android' ? '10.0.2.2' : '192.168.0.73';
-const API_URL = Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || `http://${localhost}:3000`;
+
+const API_URL = getApiUrl();
 
 const CycleCountDetailsScreen = () => {
   const navigation = useNavigation();
@@ -40,6 +42,13 @@ const CycleCountDetailsScreen = () => {
   const [adjustInventory, setAdjustInventory] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [availableUsers, setAvailableUsers] = useState([]);
+  
+  // New state for task selection and assignment
+  const [selectedTasks, setSelectedTasks] = useState(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [warehouseWorkers, setWarehouseWorkers] = useState([]);
+  const [selectedWorker, setSelectedWorker] = useState(null);
+  const [assigning, setAssigning] = useState(false);
 
   const statusColors = {
     SCHEDULED: '#2196F3',
@@ -89,6 +98,11 @@ const CycleCountDetailsScreen = () => {
       if (response.ok) {
         const data = await response.json();
         setCycleCount(data);
+        
+        // Load warehouse workers if we have warehouse info
+        if (data.warehouse?.id) {
+          loadWarehouseWorkers(data.warehouse.id);
+        }
       } else {
         Alert.alert('Error', 'Failed to load cycle count details');
         navigation.goBack();
@@ -117,6 +131,15 @@ const CycleCountDetailsScreen = () => {
       }
     } catch (error) {
       console.error('Error loading users:', error);
+    }
+  };
+
+  const loadWarehouseWorkers = async (warehouseId) => {
+    try {
+      const workers = await getWarehouseWorkers(userToken, warehouseId);
+      setWarehouseWorkers(workers);
+    } catch (error) {
+      console.error('CycleCountDetails: Error loading warehouse workers:', error);
     }
   };
 
@@ -261,6 +284,84 @@ const CycleCountDetailsScreen = () => {
     }
   };
 
+  // Task selection functions
+  const toggleTaskSelection = (taskId) => {
+    const newSelection = new Set(selectedTasks);
+    if (newSelection.has(taskId)) {
+      newSelection.delete(taskId);
+    } else {
+      newSelection.add(taskId);
+    }
+    setSelectedTasks(newSelection);
+  };
+
+  const selectAllTasks = () => {
+    if (!cycleCount?.tasks) return;
+    const allTaskIds = new Set(cycleCount.tasks.map(task => task.id));
+    setSelectedTasks(allTaskIds);
+  };
+
+  const clearSelection = () => {
+    setSelectedTasks(new Set());
+    setSelectionMode(false);
+  };
+
+  const handleBulkAssign = async () => {
+    if (selectedTasks.size === 0) {
+      Alert.alert('No Tasks Selected', 'Please select tasks to assign');
+      return;
+    }
+    
+    // Ensure warehouse workers are loaded before opening modal
+    if (cycleCount?.warehouse?.id) {
+      await loadWarehouseWorkers(cycleCount.warehouse.id);
+    }
+    
+    setSelectedWorker(null);
+    setShowAssignModal(true);
+  };
+
+  const assignSelectedTasks = async (workerId) => {
+    try {
+      setAssigning(true);
+      
+      const assignments = [{
+        taskIds: Array.from(selectedTasks),
+        assignedToId: workerId
+      }];
+
+      await assignCycleCountTasks(userToken, cycleCountId, assignments);
+      
+      // Refresh cycle count details
+      await loadCycleCountDetails();
+      setShowAssignModal(false);
+      clearSelection();
+      
+      Alert.alert('Success', `${selectedTasks.size} tasks assigned successfully`);
+    } catch (error) {
+      console.error('Error assigning tasks:', error);
+      Alert.alert('Error', 'Failed to assign tasks');
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const handleTaskPress = (task) => {
+    if (selectionMode) {
+      toggleTaskSelection(task.id);
+    } else {
+      // Navigate to task detail screen
+      navigation.navigate('CycleCountTaskDetail', { taskId: task.id });
+    }
+  };
+
+  const handleTaskLongPress = (task) => {
+    if (!selectionMode) {
+      setSelectionMode(true);
+      toggleTaskSelection(task.id);
+    }
+  };
+
   const renderOverviewTab = () => {
     if (!cycleCount) return null;
 
@@ -351,91 +452,203 @@ const CycleCountDetailsScreen = () => {
   const renderTasksTab = () => {
     if (!cycleCount?.tasks) return null;
 
+    const renderTaskSelectionHeader = () => {
+      if (!selectionMode && selectedTasks.size === 0) return null;
+      
+      return (
+        <View style={styles.selectionHeader}>
+          <View style={styles.selectionInfo}>
+            <Text style={styles.selectionText}>
+              {selectionMode ? `${selectedTasks.size} selected` : 'Select tasks to assign'}
+            </Text>
+            {selectionMode && (
+              <TouchableOpacity
+                style={styles.selectAllButton}
+                onPress={selectedTasks.size === cycleCount.tasks.length ? clearSelection : selectAllTasks}
+              >
+                <Text style={styles.selectAllText}>
+                  {selectedTasks.size === cycleCount.tasks.length ? 'Clear All' : 'Select All'}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <View style={styles.selectionActions}>
+            {selectedTasks.size > 0 && (
+              <TouchableOpacity
+                style={styles.assignButton}
+                onPress={handleBulkAssign}
+              >
+                <Ionicons name="person-add" size={16} color="#fff" />
+                <Text style={styles.assignButtonText}>Assign</Text>
+              </TouchableOpacity>
+            )}
+            {selectionMode && (
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={clearSelection}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      );
+    };
+
     const renderTaskItem = ({ item: task }) => {
       const totalItems = task.items.length;
       const countedItems = task.items.filter(item => 
         item.status === 'COUNTED' || item.status === 'APPROVED'
       ).length;
       const progress = totalItems > 0 ? (countedItems / totalItems) * 100 : 0;
+      const isSelected = selectedTasks.has(task.id);
 
       return (
-        <View style={styles.taskCard}>
-          <View style={styles.taskHeader}>
-            <View style={styles.taskInfo}>
-              <Text style={styles.taskTitle}>
-                {task.location ? 
-                  `${task.location.zone}-${task.location.aisle}-${task.location.shelf}` :
-                  task.zone || 'Multiple Locations'
-                }
-              </Text>
-              <Text style={styles.taskAssignee}>
-                {task.assignedTo ? `Assigned to: ${task.assignedTo.username}` : 'Unassigned'}
-              </Text>
+        <TouchableOpacity
+          style={[
+            styles.taskCard,
+            isSelected && styles.selectedTaskCard,
+            selectionMode && styles.selectableTaskCard
+          ]}
+          onPress={() => handleTaskPress(task)}
+          onLongPress={() => handleTaskLongPress(task)}
+          activeOpacity={0.7}
+        >
+          {selectionMode && (
+            <View style={styles.selectionCheckbox}>
+              <Ionicons 
+                name={isSelected ? "checkbox" : "checkbox-outline"} 
+                size={24} 
+                color={isSelected ? "#2196F3" : "#999"} 
+              />
             </View>
-            <View style={[
-              styles.taskStatusBadge,
-              { backgroundColor: taskStatusColors[task.status] }
-            ]}>
-              <Text style={styles.taskStatusText}>{task.status.replace('_', ' ')}</Text>
-            </View>
-          </View>
-
-          <View style={styles.taskStats}>
-            <View style={styles.taskStatItem}>
-              <Text style={styles.taskStatValue}>{totalItems}</Text>
-              <Text style={styles.taskStatLabel}>Items</Text>
-            </View>
-            <View style={styles.taskStatItem}>
-              <Text style={styles.taskStatValue}>{countedItems}</Text>
-              <Text style={styles.taskStatLabel}>Counted</Text>
-            </View>
-            <View style={styles.taskStatItem}>
-              <Text style={styles.taskStatValue}>{Math.round(progress)}%</Text>
-              <Text style={styles.taskStatLabel}>Progress</Text>
-            </View>
-            {task.accuracyRate && (
-              <View style={styles.taskStatItem}>
-                <Text style={[
-                  styles.taskStatValue,
-                  { color: task.accuracyRate >= 95 ? '#4CAF50' : '#FF9800' }
-                ]}>
-                  {task.accuracyRate}%
+          )}
+          
+          <View style={[styles.taskContent, selectionMode && styles.taskContentWithCheckbox]}>
+            <View style={styles.taskHeader}>
+              <View style={styles.taskInfo}>
+                <Text style={styles.taskTitle}>
+                  {task.location ? 
+                    `${task.location.zone}-${task.location.aisle}-${task.location.shelf}` :
+                    task.zone || 'Multiple Locations'
+                  }
                 </Text>
-                <Text style={styles.taskStatLabel}>Accuracy</Text>
+                <Text style={[
+                  styles.taskAssignee,
+                  !task.assignedTo && styles.unassignedText
+                ]}>
+                  {task.assignedTo ? `Assigned to: ${task.assignedTo.username}` : 'Unassigned'}
+                </Text>
+              </View>
+              <View style={[
+                styles.taskStatusBadge,
+                { backgroundColor: taskStatusColors[task.status] }
+              ]}>
+                <Text style={styles.taskStatusText}>{task.status.replace('_', ' ')}</Text>
+              </View>
+            </View>
+
+            <View style={styles.taskStats}>
+              <View style={styles.taskStatItem}>
+                <Text style={styles.taskStatValue}>{totalItems}</Text>
+                <Text style={styles.taskStatLabel}>Items</Text>
+              </View>
+              <View style={styles.taskStatItem}>
+                <Text style={styles.taskStatValue}>{countedItems}</Text>
+                <Text style={styles.taskStatLabel}>Counted</Text>
+              </View>
+              <View style={styles.taskStatItem}>
+                <Text style={styles.taskStatValue}>{Math.round(progress)}%</Text>
+                <Text style={styles.taskStatLabel}>Progress</Text>
+              </View>
+              {task.accuracyRate && (
+                <View style={styles.taskStatItem}>
+                  <Text style={[
+                    styles.taskStatValue,
+                    { color: task.accuracyRate >= 95 ? '#4CAF50' : '#FF9800' }
+                  ]}>
+                    {task.accuracyRate}%
+                  </Text>
+                  <Text style={styles.taskStatLabel}>Accuracy</Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.taskProgressBar}>
+              <View
+                style={[
+                  styles.taskProgressFill,
+                  { 
+                    width: `${progress}%`,
+                    backgroundColor: taskStatusColors[task.status]
+                  }
+                ]}
+              />
+            </View>
+
+            {task.varianceFlag && (
+              <View style={styles.varianceAlert}>
+                <Ionicons name="warning" size={16} color="#FF9800" />
+                <Text style={styles.varianceAlertText}>Contains variances requiring review</Text>
+              </View>
+            )}
+
+            {!selectionMode && (
+              <View style={styles.taskActions}>
+                <TouchableOpacity
+                  style={styles.taskActionButton}
+                  onPress={() => navigation.navigate('CycleCountTaskDetail', { taskId: task.id })}
+                >
+                  <Ionicons name="eye" size={16} color="#2196F3" />
+                  <Text style={styles.taskActionText}>View Details</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.taskActionButton,
+                    task.assignedTo ? styles.reassignButton : styles.assignTaskButton
+                  ]}
+                  onPress={async () => {
+                    // Ensure warehouse workers are loaded before opening modal
+                    if (cycleCount?.warehouse?.id) {
+                      await loadWarehouseWorkers(cycleCount.warehouse.id);
+                    }
+                    
+                    setSelectedTasks(new Set([task.id]));
+                    setSelectedWorker(task.assignedTo);
+                    setShowAssignModal(true);
+                  }}
+                >
+                  <Ionicons 
+                    name={task.assignedTo ? "refresh" : "person-add"} 
+                    size={16} 
+                    color={task.assignedTo ? "#FF9800" : "#4CAF50"} 
+                  />
+                  <Text style={[
+                    styles.taskActionText,
+                    task.assignedTo ? styles.reassignText : styles.assignText
+                  ]}>
+                    {task.assignedTo ? 'Reassign' : 'Assign'}
+                  </Text>
+                </TouchableOpacity>
               </View>
             )}
           </View>
-
-          <View style={styles.taskProgressBar}>
-            <View
-              style={[
-                styles.taskProgressFill,
-                { 
-                  width: `${progress}%`,
-                  backgroundColor: taskStatusColors[task.status]
-                }
-              ]}
-            />
-          </View>
-
-          {task.varianceFlag && (
-            <View style={styles.varianceAlert}>
-              <Ionicons name="warning" size={16} color="#FF9800" />
-              <Text style={styles.varianceAlertText}>Contains variances requiring review</Text>
-            </View>
-          )}
-        </View>
+        </TouchableOpacity>
       );
     };
 
     return (
-      <FlatList
-        data={cycleCount.tasks}
-        renderItem={renderTaskItem}
-        keyExtractor={item => item.id}
-        style={styles.tabContent}
-        showsVerticalScrollIndicator={false}
-      />
+      <View style={styles.tasksContainer}>
+        {renderTaskSelectionHeader()}
+        <FlatList
+          data={cycleCount.tasks}
+          renderItem={renderTaskItem}
+          keyExtractor={item => item.id}
+          style={styles.tasksList}
+          showsVerticalScrollIndicator={false}
+        />
+      </View>
     );
   };
 
@@ -663,6 +876,84 @@ const CycleCountDetailsScreen = () => {
     );
   };
 
+  const renderAssignModal = () => (
+    <Modal
+      visible={showAssignModal}
+      animationType="slide"
+      presentationStyle="pageSheet"
+    >
+      <SafeAreaView style={styles.modalContainer}>
+        <View style={styles.modalHeader}>
+          <TouchableOpacity
+            style={styles.modalCloseButton}
+            onPress={() => setShowAssignModal(false)}
+          >
+            <Ionicons name="close" size={24} color="#666" />
+          </TouchableOpacity>
+          <Text style={styles.modalTitle}>
+            {selectedTasks.size > 1 ? `Assign ${selectedTasks.size} Tasks` : 'Assign Task'}
+          </Text>
+          <TouchableOpacity
+            style={[
+              styles.modalSaveButton,
+              { opacity: selectedWorker ? 1 : 0.5 }
+            ]}
+            onPress={() => assignSelectedTasks(selectedWorker?.id)}
+            disabled={!selectedWorker || assigning}
+          >
+            <Text style={styles.modalSaveText}>
+              {assigning ? 'Assigning...' : 'Assign'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <FlatList
+          data={warehouseWorkers}
+          keyExtractor={worker => worker.id}
+          renderItem={({ item: worker }) => (
+            <TouchableOpacity
+              style={[
+                styles.workerItem,
+                selectedWorker?.id === worker.id && styles.selectedWorkerItem
+              ]}
+              onPress={() => setSelectedWorker(worker)}
+            >
+              <View style={styles.workerInfo}>
+                <Ionicons 
+                  name="person-circle" 
+                  size={32} 
+                  color={selectedWorker?.id === worker.id ? '#2196F3' : '#9E9E9E'} 
+                />
+                <View style={styles.workerDetails}>
+                  <Text style={[
+                    styles.workerName,
+                    selectedWorker?.id === worker.id && styles.selectedWorkerName
+                  ]}>
+                    {worker.username}
+                  </Text>
+                  <Text style={styles.workerEmail}>{worker.email}</Text>
+                  {worker.phone && (
+                    <Text style={styles.workerPhone}>{worker.phone}</Text>
+                  )}
+                </View>
+              </View>
+              {selectedWorker?.id === worker.id && (
+                <Ionicons name="checkmark-circle" size={24} color="#2196F3" />
+              )}
+            </TouchableOpacity>
+          )}
+          style={styles.workersList}
+          ListEmptyComponent={
+            <View style={styles.emptyWorkers}>
+              <Ionicons name="people-outline" size={64} color="#ccc" />
+              <Text style={styles.emptyWorkersText}>No warehouse workers found</Text>
+            </View>
+          }
+        />
+      </SafeAreaView>
+    </Modal>
+  );
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -726,6 +1017,7 @@ const CycleCountDetailsScreen = () => {
 
       {renderActionButtons()}
       {renderVarianceModal()}
+      {renderAssignModal()}
     </SafeAreaView>
   );
 };
@@ -1231,7 +1523,187 @@ const styles = StyleSheet.create({
   adjustInventoryDescription: {
     fontSize: 14,
     color: '#666'
-  }
+  },
+  // New styles for task selection and assignment
+  tasksContainer: {
+    flex: 1,
+  },
+  tasksList: {
+    flex: 1,
+    padding: 16,
+  },
+  selectionHeader: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  selectionInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  selectionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  selectAllButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#e3f2fd',
+    borderRadius: 20,
+  },
+  selectAllText: {
+    color: '#2196F3',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  selectionActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  assignButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2196F3',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 4,
+  },
+  assignButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  cancelButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 20,
+  },
+  cancelButtonText: {
+    color: '#666',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  selectedTaskCard: {
+    borderWidth: 2,
+    borderColor: '#2196F3',
+    backgroundColor: '#e3f2fd',
+  },
+  selectableTaskCard: {
+    marginLeft: 8,
+  },
+  selectionCheckbox: {
+    position: 'absolute',
+    left: -32,
+    top: 16,
+    zIndex: 1,
+  },
+  taskContent: {
+    flex: 1,
+  },
+  taskContentWithCheckbox: {
+    marginLeft: 40,
+  },
+  unassignedText: {
+    color: '#FF9800',
+    fontStyle: 'italic',
+  },
+  taskActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    gap: 8,
+  },
+  taskActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: '#f8f9fa',
+    gap: 4,
+  },
+  taskActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2196F3',
+  },
+  reassignButton: {
+    backgroundColor: '#fff3cd',
+  },
+  assignTaskButton: {
+    backgroundColor: '#d4edda',
+  },
+  reassignText: {
+    color: '#FF9800',
+  },
+  assignText: {
+    color: '#4CAF50',
+  },
+  // Assignment modal styles
+  workersList: {
+    flex: 1,
+  },
+  workerItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  selectedWorkerItem: {
+    backgroundColor: '#e3f2fd',
+  },
+  workerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  workerDetails: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  workerName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  selectedWorkerName: {
+    color: '#2196F3',
+  },
+  workerEmail: {
+    fontSize: 14,
+    color: '#666',
+  },
+  workerPhone: {
+    fontSize: 12,
+    color: '#888',
+  },
+  emptyWorkers: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  emptyWorkersText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: 12,
+  },
 });
 
 export default CycleCountDetailsScreen; 

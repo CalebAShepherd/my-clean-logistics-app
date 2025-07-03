@@ -4,6 +4,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
 import { useCompanyBranding } from '../context/CompanyBrandingContext';
+import { getApiUrl } from '../utils/apiHost';
+
+const API_URL = getApiUrl();
 
 export default function LoginScreen({ navigation }) {
   const [username, setUsername] = useState('');
@@ -21,7 +24,7 @@ export default function LoginScreen({ navigation }) {
 
     setLoading(true);
     try {
-      const res = await fetch('http://192.168.0.73:3000/auth/login', {
+      const res = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: username.trim(), password }),

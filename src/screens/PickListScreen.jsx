@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { 
   View, 
   Text, 
@@ -13,12 +13,12 @@ import {
 } from 'react-native';
 import { Card } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { useAuth } from '../context/AuthContext';
+import { AuthContext } from '../context/AuthContext';
 import { hasPickListManagement, canOptimizeRoutes, hasQualityControl } from '../utils/featureFlags';
 import { useSettings } from '../context/SettingsContext';
 
 const PickListScreen = ({ navigation, route }) => {
-  const { user } = useAuth();
+  const { user } = useContext(AuthContext);
   const { settings } = useSettings();
   const { waveId } = route.params || {};
   

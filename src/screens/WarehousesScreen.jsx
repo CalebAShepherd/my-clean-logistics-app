@@ -15,11 +15,12 @@ import Constants from 'expo-constants';
 import { AuthContext } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
 import InternalHeader from '../components/InternalHeader';
+import { getApiUrl } from '../utils/apiHost';
 
 const API_URL =
   Constants.manifest?.extra?.apiUrl ||
   Constants.expoConfig?.extra?.apiUrl ||
-  'http://192.168.0.73:3000';
+  getApiUrl();
 
 export default function WarehousesScreen({ navigation }) {
   const { userToken, user } = useContext(AuthContext);

@@ -6,12 +6,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { AuthContext } from '../context/AuthContext';
 import Constants from 'expo-constants';
 import InternalHeader from '../components/InternalHeader';
+import { getApiUrl } from '../utils/apiHost';
 
 // Read API URL from expo config or fallback
 const API_URL =
   Constants.manifest?.extra?.apiUrl ||
   Constants.expoConfig?.extra?.apiUrl ||
-  'http://192.168.0.73:3000';
+  getApiUrl();
 
 export default function AdminCarriersScreen({ navigation }) {
   const { userToken } = useContext(AuthContext);

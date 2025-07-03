@@ -1,15 +1,12 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import { getApiUrl } from '../utils/apiHost';
 
-const localhost = Platform.OS === 'android' ? '10.0.2.2' : '192.168.0.73';
-const BASE_URL =
-  Constants.manifest?.extra?.apiUrl ||
-  Constants.expoConfig?.extra?.apiUrl ||
-  `http://${localhost}:3000`;
+const API_URL = getApiUrl();
 
 // Fetch inbound shipments for a warehouse, filtered by status
 export async function fetchInboundShipments(token, warehouseId, status) {
-  const res = await fetch(`${BASE_URL}/warehouses/${warehouseId}/inbound-shipments?status=${encodeURIComponent(status)}`, {
+  const res = await fetch(`${API_URL}/warehouses/${warehouseId}/inbound-shipments?status=${encodeURIComponent(status)}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
@@ -26,7 +23,7 @@ export async function fetchInboundShipments(token, warehouseId, status) {
  * Fetch the 4 most recent shipments for the dashboard
  */
 export async function fetchRecentShipments(token) {
-  const res = await fetch(`${BASE_URL}/api/shipments/recent`, {
+  const res = await fetch(`${API_URL}/api/shipments/recent`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Error fetching recent shipments: ${res.status}`);
@@ -34,7 +31,7 @@ export async function fetchRecentShipments(token) {
 }
 
 export async function updateShipmentStatus(token, shipmentId, status) {
-  const res = await fetch(`${BASE_URL}/api/shipments/${shipmentId}/status`, {
+  const res = await fetch(`${API_URL}/api/shipments/${shipmentId}/status`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',

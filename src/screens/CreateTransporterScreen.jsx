@@ -4,10 +4,11 @@ import { View, TextInput, Button, StyleSheet, Alert, ActivityIndicator, Text, Sa
 import { AuthContext } from '../context/AuthContext';
 import { Platform } from 'react-native';
 import InternalHeader from '../components/InternalHeader';
+import { getApiUrl } from '../utils/apiHost';
 
 const API_URL = Platform.OS === 'android'
   ? 'http://10.0.2.2:3000'
-  : 'http://192.168.0.73:3000';
+  : getApiUrl();
 
 function CreateTransporterScreen({ navigation }) {
   const { userToken } = useContext(AuthContext);

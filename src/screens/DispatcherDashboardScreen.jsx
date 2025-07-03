@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native';
 import { fetchNotifications } from '../api/notifications';
 import Constants from 'expo-constants';
 import { useFocusEffect } from '@react-navigation/native';
+import { getApiUrl } from '../utils/apiHost';
 
 function DispatcherDashboardScreen({ navigation }) {
   const { userToken } = useContext(AuthContext);
@@ -28,7 +29,7 @@ function DispatcherDashboardScreen({ navigation }) {
   const [msgUnreadCount, setMsgUnreadCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
-  const API_URL = Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.73:3000';
+  const API_URL = Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || getApiUrl();
 
   useEffect(() => {
     setLoadingCompleted(true);

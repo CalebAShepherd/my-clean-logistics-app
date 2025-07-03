@@ -6,11 +6,11 @@ const userController= require('../controllers/userController');
 
 // later you'll add actual handlers here
 
-// Route for listing all users (admin only)
+// Route for listing all users (admin and crm_admin)
 router.get(
     '/',
     requireAuth,
-    requireRole('admin'),
+    requireRole(['admin', 'crm_admin']),
     userController.listUsers
 );
 
@@ -38,7 +38,7 @@ router.put(
 router.put(
     '/:id/role',
     requireAuth,
-    requireRole('admin'),
+    requireRole(['admin', 'crm_admin']),
     userController.changeRole
 );
 
@@ -72,7 +72,7 @@ router.put(
 router.delete(
   '/:id',
   requireAuth,
-  requireRole(['admin','dispatcher']),
+  requireRole(['admin','dispatcher','crm_admin']),
   userController.deleteUserById
 );
 

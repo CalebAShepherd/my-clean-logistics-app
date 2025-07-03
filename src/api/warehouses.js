@@ -1,11 +1,9 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import apiClient from './apiClient';
+import { getApiUrl } from '../utils/apiHost';
 
-const localhost = Platform.OS === 'android' ? '10.0.2.2' : '192.168.0.73';
-const API_URL =
-  Constants.manifest?.extra?.apiUrl ||
-  Constants.expoConfig?.extra?.apiUrl ||
-  `http://${localhost}:3000`;
+const API_URL = getApiUrl();
 
 /**
  * Fetch all warehouses
@@ -16,4 +14,33 @@ export async function fetchWarehouses(token) {
   });
   if (!res.ok) throw new Error(`Error fetching warehouses: ${res.status}`);
   return res.json();
-} 
+}
+
+export const warehousesAPI = {
+  async getWarehouses(params = {}) {
+    const response = await apiClient.get('/warehouses', { params });
+    return response.data;
+  },
+
+  async getWarehouse(id) {
+    const response = await apiClient.get(`/warehouses/${id}`);
+    return response.data;
+  },
+
+  async createWarehouse(warehouseData) {
+    const response = await apiClient.post('/warehouses', warehouseData);
+    return response.data;
+  },
+
+  async updateWarehouse(id, warehouseData) {
+    const response = await apiClient.put(`/warehouses/${id}`, warehouseData);
+    return response.data;
+  },
+
+  async deleteWarehouse(id) {
+    const response = await apiClient.delete(`/warehouses/${id}`);
+    return response.data;
+  }
+};
+
+export default warehousesAPI; 

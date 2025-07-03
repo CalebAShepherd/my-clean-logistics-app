@@ -4,8 +4,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
 import { useCompanyBranding } from '../context/CompanyBrandingContext';
+import { getApiUrl } from '../utils/apiHost';
 
-const API_URL = 'http://192.168.0.73:3000';
+const API_URL = getApiUrl();
 
 export default function SignUpScreen({ navigation }) {
   const [email, setEmail] = useState('');

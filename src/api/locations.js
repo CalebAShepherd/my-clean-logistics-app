@@ -1,11 +1,9 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import apiClient from './apiClient';
+import { getApiUrl } from '../utils/apiHost';
 
-const localhost = Platform.OS === 'android' ? '10.0.2.2' : '192.168.0.73';
-const API_URL =
-  Constants.manifest?.extra?.apiUrl ||
-  Constants.expoConfig?.extra?.apiUrl ||
-  `http://${localhost}:3000`;
+const API_URL = getApiUrl();
 
 /**
  * Fetch all locations, optionally filtered by warehouseId
@@ -108,4 +106,81 @@ export async function fetchFleetLocations(token) {
   });
   if (!res.ok) throw new Error(`Error fetching fleet locations: ${res.status}`);
   return res.json();
-} 
+}
+
+/**
+ * Delete all locations
+ */
+export async function deleteAllLocations(token) {
+  const res = await fetch(`${API_URL}/locations`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok && res.status !== 204) throw new Error(`Error deleting all locations: ${res.status}`);
+}
+
+export const locationsAPI = {
+  async getLocations(params = {}) {
+    const response = await apiClient.get('/locations', { params });
+    return response.data;
+  },
+
+  async getLocation(id) {
+    const response = await apiClient.get(`/locations/${id}`);
+    return response.data;
+  },
+
+  async getLocationsByWarehouse(warehouseId) {
+    const response = await apiClient.get(`/locations/warehouse/${warehouseId}`);
+    return response.data;
+  },
+
+  async createLocation(locationData) {
+    const response = await apiClient.post('/locations', locationData);
+    return response.data;
+  },
+
+  async updateLocation(id, locationData) {
+    const response = await apiClient.put(`/locations/${id}`, locationData);
+    return response.data;
+  },
+
+  async deleteLocation(id) {
+    const response = await apiClient.delete(`/locations/${id}`);
+    return response.data;
+  }
+};
+
+/**
+ * Fetch location hierarchy for hierarchical pickers
+ * @param {string} token - Auth token
+ * @param {string} warehouseId - Warehouse ID
+ * @param {Object} filters - Optional filters { zone, rack, aisle, shelf }
+ * @returns {Object} Hierarchy with zones, racks, shelves, bins arrays
+ */
+export const fetchLocationHierarchy = async (token, warehouseId, filters = {}) => {
+  const params = new URLSearchParams({ warehouseId });
+  
+  // Add optional filters
+  if (filters.zone) params.append('zone', filters.zone);
+  if (filters.rack) params.append('rack', filters.rack);
+  if (filters.aisle) params.append('aisle', filters.aisle);
+  if (filters.shelf) params.append('shelf', filters.shelf);
+  
+  const response = await fetch(`${API_URL}/locations/hierarchy?${params}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Failed to fetch location hierarchy');
+  }
+  
+  return response.json();
+};
+
+export default locationsAPI; 

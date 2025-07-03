@@ -4,8 +4,9 @@ import { AuthContext } from '../context/AuthContext';
 import Constants from 'expo-constants';
 import InternalHeader from '../components/InternalHeader';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { getApiUrl } from '../utils/apiHost';
 
-const API_URL = Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.73:3000';
+const API_URL = getApiUrl();
 
 export default function NewConversationScreen({ navigation }) {
   const { userToken } = useContext(AuthContext);

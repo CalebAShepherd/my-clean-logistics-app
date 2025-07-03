@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Buffer } from 'buffer';
 import socketService from '../services/socketService';
+import apiClient from '../api/apiClient';
 
 // Simple JWT payload parser
 function parseJwt(token) {
@@ -18,7 +19,9 @@ function parseJwt(token) {
 // Helper to check if JWT is expired
 function isTokenExpired(token) {
   const decoded = parseJwt(token);
-  if (!decoded || !decoded.exp) return true;
+  if (!decoded) return true;
+  // If no exp field, token doesn't expire
+  if (!decoded.exp) return false;
   // exp is in seconds since epoch
   return Date.now() >= decoded.exp * 1000;
 }
@@ -29,6 +32,9 @@ export function AuthProvider({ children }) {
   const [userToken, setUserToken] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Configure API client to use current token
+  apiClient.setTokenProvider(() => userToken);
 
   const login = async (token) => {
     setLoading(true);

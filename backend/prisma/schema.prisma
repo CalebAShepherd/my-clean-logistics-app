@@ -9,75 +9,186 @@ datasource db {
 
 // Multi-tenant: Tenant model
 model Tenant {
-  id          String     @id @default(uuid())
-  name        String
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations to scoped entities
-  users       User[]
-  accounts    Account[]
-  contacts    Contact[]
-  deals       Deal[]
-  invoices    Invoice[]
-  payments    Payment[]
+  users    User[]
+  accounts Account[]
+  contacts Contact[]
+  deals    Deal[]
+  invoices Invoice[]
+  payments Payment[]
+  
+  // ERP Relations
+  chartOfAccounts     ChartOfAccounts[]
+  generalLedger       GeneralLedger[]
+  journalEntries      JournalEntry[]
+  journalEntrySequences JournalEntrySequence[]
+  costCenters         CostCenter[]
+  expenses            Expense[]
+  budgets             Budget[]
+  currencies          Currency[]
+  exchangeRates       ExchangeRate[]
+  invoicesEnhanced    InvoiceEnhanced[]
+  paymentsEnhanced    PaymentEnhanced[]
+  reportingPeriods    ReportingPeriod[]
+  
+  // Phase 4: Advanced Cost Management Relations
+  activityCenters     ActivityCenter[]
+  activityCosts       ActivityCost[]
+  costAllocations     CostAllocation[]
+  customerProfitability CustomerProfitability[]
+  serviceProfitability ServiceProfitability[]
+  budgetScenarios     BudgetScenario[]
+  budgetForecasts     BudgetForecast[]
+  cashFlowForecasts   CashFlowForecast[]
+  varianceAnalyses    VarianceAnalysis[]
+  // Phase 5 Relations
+  auditLogs          AuditLog[]          @relation("TenantAuditLogs")
+  soxControls        SoxControl[]        @relation("TenantSoxControls")
+  soxTests           SoxTest[]          @relation("TenantSoxTests")
+  insuranceClaims    InsuranceClaim[]    @relation("TenantInsuranceClaims")
+  complianceDocuments ComplianceDocument[] @relation("TenantComplianceDocuments")
+  documentPolicies    DocumentRetentionPolicy[] @relation("TenantDocumentPolicies")
+  complianceReports   ComplianceReport[]    @relation("TenantComplianceReports")
+  complianceMetrics   ComplianceMetric[]    @relation("TenantComplianceMetrics")
+  riskAssessments     RiskAssessment[]      @relation("TenantRiskAssessments")
+  creditLimits        CreditLimit[]         @relation("TenantCreditLimits")
+  documentReminders   DocumentReminder[]    @relation("TenantDocumentReminders")
+  // CRM Relations
+  leads   Lead[]
+  quotes  Quote[]
+  tasks   Task[]
+  tickets Ticket[]
+}
+
+// Journal Entry Sequence for atomic number generation
+model JournalEntrySequence {
+  id         String @id @default(uuid())
+  tenantId   String @unique
+  lastNumber Int    @default(0)
+  tenant     Tenant @relation(fields: [tenantId], references: [id])
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([tenantId])
 }
 
 model User {
-  id                                    String         @id @default(uuid())
-  email                                 String         @unique
+  id                                    String                    @id @default(uuid())
+  email                                 String                    @unique
   password                              String
   role                                  Role
-  createdAt                             DateTime       @default(now())
-  updatedAt                             DateTime       @updatedAt
-  username                              String         @unique
+  createdAt                             DateTime                  @default(now())
+  updatedAt                             DateTime                  @updatedAt
+  username                              String                    @unique
   phone                                 String?
   warehouseId                           String?
-  warehouse                             Warehouse?     @relation("WarehouseAdmin", fields: [warehouseId], references: [id])
+  warehouse                             Warehouse?                @relation("WarehouseAdmin", fields: [warehouseId], references: [id])
   DockSchedule                          DockSchedule[]
   Offer                                 Offer[]
   Route                                 Route[]
-  carrierShipments                      Shipment[]     @relation("CarrierShipments")
-  clientShipments                       Shipment[]     @relation("ClientShipments")
-  dispatcherShipments                   Shipment[]     @relation("DispatcherShipments")
-  Shipment_Shipment_transporterIdToUser Shipment[]     @relation("Shipment_transporterIdToUser")
+  carrierShipments                      Shipment[]                @relation("CarrierShipments")
+  clientShipments                       Shipment[]                @relation("ClientShipments")
+  dispatcherShipments                   Shipment[]                @relation("DispatcherShipments")
+  Shipment_Shipment_transporterIdToUser Shipment[]                @relation("Shipment_transporterIdToUser")
   TransporterLocation                   TransporterLocation?
-  notifications                         Notification[] @relation("UserNotifications")
-  announcements                         Announcement[]  @relation("AnnouncementAuthor")
+  notifications                         Notification[]            @relation("UserNotifications")
+  announcements                         Announcement[]            @relation("AnnouncementAuthor")
   accounts                              Account[]
   tenantId                              String?
-  tenant                                Tenant?        @relation(fields: [tenantId], references: [id])
+  tenant                                Tenant?                   @relation(fields: [tenantId], references: [id])
   conversationParticipants              ConversationParticipant[]
   sentMessages                          Message[]
-  
+
   // Pick & Pack Operations Relations
-  createdWaves                          Wave[]         @relation("WaveCreator")
-  assignedWaves                         Wave[]         @relation("WaveAssignedPicker")
-  assignedPickLists                     PickList[]     @relation("PickListAssignedPicker")
-  pickTasks                             PickTask[]     @relation("PickTaskPicker")
-  verifiedPickTasks                     PickTask[]     @relation("PickTaskVerifier")
-  packingSlips                          PackingSlip[]  @relation("PackingSlipPacker")
-  
+  createdWaves      Wave[]        @relation("WaveCreator")
+  assignedWaves     Wave[]        @relation("WaveAssignedPicker")
+  assignedPickLists PickList[]    @relation("PickListAssignedPicker")
+  pickTasks         PickTask[]    @relation("PickTaskPicker")
+  verifiedPickTasks PickTask[]    @relation("PickTaskVerifier")
+  packingSlips      PackingSlip[] @relation("PackingSlipPacker")
+
   // Receiving & Put-Away Operations Relations
-  receipts                              Receipt[]      @relation("ReceiptReceiver")
-  assignedPutAwayTasks                  PutAwayTask[]  @relation("PutAwayAssignedUser")
-  assignedCrossDockTasks                CrossDockTask[] @relation("CrossDockAssignedUser")
-  
+  receipts               Receipt[]       @relation("ReceiptReceiver")
+  assignedPutAwayTasks   PutAwayTask[]   @relation("PutAwayAssignedUser")
+  assignedCrossDockTasks CrossDockTask[] @relation("CrossDockAssignedUser")
+
   // Cycle Counting Relations
-  createdCycleCounts                    CycleCount[]   @relation("CycleCountCreatedBy")
-  assignedCycleCounts                   CycleCount[]   @relation("CycleCountAssignedTo")
-  assignedCountTasks                    CycleCountTask[] @relation("CycleCountTaskAssignedTo")
-  countedItems                          CycleCountItem[] @relation("CycleCountItemCountedBy")
+  createdCycleCounts  CycleCount[]     @relation("CycleCountCreatedBy")
+  assignedCycleCounts CycleCount[]     @relation("CycleCountAssignedTo")
+  assignedCountTasks  CycleCountTask[] @relation("CycleCountTaskAssignedTo")
+  countedItems        CycleCountItem[] @relation("CycleCountItemCountedBy")
+
+  // Loading/Unloading Task Relations
+  loadingTaskAssignments LoadingTaskAssignment[] @relation("LoadingTaskWorker")
+  
+  // ERP Relations
+  approvedJournalEntries JournalEntry[]    @relation("JournalApprover")
+  managedCostCenters     CostCenter[]      @relation("CostCenterManager")
+  approvedExpenses       Expense[]         @relation("ExpenseApprover")
+  customerInvoices       InvoiceEnhanced[] @relation("CustomerInvoices")
+  processedPayments      PaymentEnhanced[] @relation("PaymentProcessor")
+  
+  // Procurement Relations
+  purchaseRequisitions   PurchaseRequisition[] @relation("PurchaseRequisitionRequester")
+  createdPurchaseOrders  PurchaseOrder[]   @relation("PurchaseOrderCreator")
+  approvedPurchaseOrders PurchaseOrder[]   @relation("PurchaseOrderApprover")
+  purchaseOrderReceipts  PurchaseOrderReceipt[] @relation("PurchaseOrderReceiver")
+  vendorScorecards       VendorScorecard[] @relation("VendorScorecardEvaluator")
+  priceQuoteRequests     PriceQuote[]      @relation("PriceQuoteRequester")
+  
+  // Asset & Maintenance Relations
+  assignedAssets         Asset[]           @relation("AssetAssignedTo")
+  assignedWorkOrders     WorkOrder[]       @relation("WorkOrderAssignedTo")
+  reportedWorkOrders     WorkOrder[]       @relation("WorkOrderReporter")
+  performedMaintenance   MaintenanceLog[]  @relation("MaintenancePerformedBy")
+  assetReadings          AssetReading[]    @relation("AssetReadingRecorder")
+  
+  // Facility Maintenance & Compliance Relations
+  assignedFacilityMaintenance FacilityMaintenanceLog[] @relation("FacilityMaintenanceAssigned")
+  performedFacilityMaintenance FacilityMaintenanceLog[] @relation("FacilityMaintenancePerformed")
+  responsibleCompliance  FacilityCompliance[] @relation("FacilityComplianceResponsible")
+  auditedCompliance      ComplianceAudit[] @relation("ComplianceAuditor")
+  followUpCompliance     ComplianceAudit[] @relation("ComplianceFollowUp")
+  reportedSafetyIncidents SafetyIncident[] @relation("SafetyIncidentReporter")
+  investigatedSafetyIncidents SafetyIncident[] @relation("SafetyIncidentInvestigator")
+  environmentalMonitoring EnvironmentalMonitoring[] @relation("EnvironmentalMonitoringRecorder")
+  
+  // Phase 4: Advanced Cost Management Relations
+  customerCostAllocations CostAllocation[] @relation("CustomerCostAllocations")
+  customerProfitabilityAnalysis CustomerProfitability[] @relation("CustomerProfitabilityAnalysis")
+  // Phase 5 Relations
+  auditLogs      AuditLog[]   @relation("UserAuditLogs")
+  ownedSoxControls SoxControl[] @relation("SoxControlOwner")
+  soxTestRuns     SoxTest[]   @relation("SoxTestTester")
+  uploadedDocuments   ComplianceDocument[] @relation("DocumentUploader")
+  documentVersions    DocumentVersion[]    @relation("DocumentVersionUploader")
+  documentReminders   DocumentReminder[]   @relation("DocumentReminderAssignee")
+  createdPolicies     DocumentRetentionPolicy[] @relation("DocumentPolicyCreator")
+  generatedReports    ComplianceReport[]   @relation("ComplianceReportGenerator")
+  riskAssessments     RiskAssessment[]     @relation("RiskAssessmentAssessor")
+  approvedCreditLimits CreditLimit[]       @relation("CreditLimitApprover")
+  // CRM Relations
+  leads               Lead[]   @relation("LeadOwner")
+  assignedTasks       Task[]    @relation("TaskAssignee")
+  assignedTickets     Ticket[]  @relation("TicketAssignee")
+  
+  // Blueprint Relations
+  createdBlueprints   Blueprint[] @relation("BlueprintCreator")
 }
 
 model Shipment {
-  id                                String          @id @default(uuid())
+  id                                String           @id @default(uuid())
   clientId                          String
   dispatcherId                      String?
   carrierId                         String?
-  status                            ShipmentStatus  @default(CREATED)
-  createdAt                         DateTime        @default(now())
-  updatedAt                         DateTime        @default(now())
+  status                            ShipmentStatus   @default(CREATED)
+  createdAt                         DateTime         @default(now())
+  updatedAt                         DateTime         @default(now())
   deliveryEmail                     String
   deliveryName                      String
   deliveryPhone                     String
@@ -114,26 +225,36 @@ model Shipment {
   deliveryZip                       String
   DockSchedule                      DockSchedule[]
   RouteShipment                     RouteShipment[]
-  carrier                           User?           @relation("CarrierShipments", fields: [carrierId], references: [id])
-  client                            User            @relation("ClientShipments", fields: [clientId], references: [id])
-  dispatcher                        User?           @relation("DispatcherShipments", fields: [dispatcherId], references: [id])
-  serviceCarrier                    Carrier?        @relation("ServiceCarrierShipments", fields: [serviceCarrierId], references: [id])
-  User_Shipment_transporterIdToUser User?           @relation("Shipment_transporterIdToUser", fields: [transporterId], references: [id])
+  carrier                           User?            @relation("CarrierShipments", fields: [carrierId], references: [id])
+  client                            User             @relation("ClientShipments", fields: [clientId], references: [id])
+  dispatcher                        User?            @relation("DispatcherShipments", fields: [dispatcherId], references: [id])
+  serviceCarrier                    Carrier?         @relation("ServiceCarrierShipments", fields: [serviceCarrierId], references: [id])
+  User_Shipment_transporterIdToUser User?            @relation("Shipment_transporterIdToUser", fields: [transporterId], references: [id])
   warehouseId                       String?
-  warehouse                         Warehouse?      @relation(fields: [warehouseId], references: [id])
-  hazmat                            Boolean         @default(false)
+  warehouse                         Warehouse?       @relation(fields: [warehouseId], references: [id])
+  hazmat                            Boolean          @default(false)
   documents                         Document[]
-  palletCount                       Int             @default(0)
+  palletCount                       Int              @default(0)
   shipmentUpdates                   ShipmentUpdate[]
-  
+
   // Pick & Pack Operations Relations
-  waveOrders                        WaveOrder[]
-  pickTasks                         PickTask[]
-  packingSlips                      PackingSlip[]
-  
+  waveOrders   WaveOrder[]
+  pickTasks    PickTask[]
+  packingSlips PackingSlip[]
+
   // Receiving & Cross-Dock Relations
-  crossDockInbound                  CrossDockTask[] @relation("CrossDockInbound")
-  crossDockOutbound                 CrossDockTask[] @relation("CrossDockOutbound")
+  crossDockInbound  CrossDockTask[] @relation("CrossDockInbound")
+  crossDockOutbound CrossDockTask[] @relation("CrossDockOutbound")
+
+  // Loading/Unloading Relations
+  loadingTasks ShipmentLoadingTask[]
+  
+  // ERP Relations
+  invoiceLineItems InvoiceLineItem[]
+  
+  // Phase 4: Advanced Cost Management Relations
+  activityCosts    ActivityCost[]    @relation("ShipmentActivityCosts")
+  costAllocations  CostAllocation[]  @relation("ShipmentCostAllocations")
 }
 
 model Carrier {
@@ -146,101 +267,134 @@ model Carrier {
 }
 
 model CompanySettings {
-  id                         String   @id @default(uuid())
-  companyName                String?
-  logoUrl                    String?
-  
+  id          String  @id @default(uuid())
+  companyName String?
+  logoUrl     String?
+
   // Existing core feature flags
-  hasWarehouses              Boolean  @default(false)
-  ownTransporters            Boolean  @default(false)
-  useThirdPartyCarriers      Boolean  @default(true)
-  enableTrackingInput        Boolean  @default(true)
-  enableAddressValidation    Boolean  @default(true)
-  enableRateQuotes           Boolean  @default(true)
-  enablePickups              Boolean  @default(true)
-  enableNotifications        Boolean  @default(true)
-  enableDevTools             Boolean  @default(false)
-  enableWarehouseHeatmap     Boolean  @default(true)
-  
+  hasWarehouses           Boolean @default(false)
+  ownTransporters         Boolean @default(false)
+  useThirdPartyCarriers   Boolean @default(true)
+  enableTrackingInput     Boolean @default(true)
+  enableAddressValidation Boolean @default(true)
+  enableRateQuotes        Boolean @default(true)
+  enablePickups           Boolean @default(true)
+  enableNotifications     Boolean @default(true)
+  enableDevTools          Boolean @default(false)
+  enableWarehouseHeatmap  Boolean @default(true)
+
   // === WAREHOUSE MANAGEMENT FEATURES ===
   // Core Operations
-  enableReceivingWorkflows     Boolean  @default(false)
-  enablePickPackOperations     Boolean  @default(false)
-  enableCrossDocking          Boolean  @default(false)
-  enableCycleCountingAdvanced Boolean  @default(false)
-  enableSlottingOptimization  Boolean  @default(false)
-  enableYardManagement        Boolean  @default(false)
-  enableLaborManagement       Boolean  @default(false)
-  enableReturnsManagement     Boolean  @default(false)
-  enableValueAddedServices   Boolean  @default(false)
-  enableQualityControl       Boolean  @default(false)
-  enableKittingAssembly      Boolean  @default(false)
-  enableWaveManagement       Boolean  @default(false)
-  
+  enableReceivingWorkflows    Boolean @default(false)
+  enablePickPackOperations    Boolean @default(false)
+  enableCrossDocking          Boolean @default(false)
+  enableCycleCountingAdvanced Boolean @default(false)
+  enableSlottingOptimization  Boolean @default(false)
+  enableYardManagement        Boolean @default(false)
+  enableLaborManagement       Boolean @default(false)
+  enableReturnsManagement     Boolean @default(false)
+  enableValueAddedServices    Boolean @default(false)
+  enableQualityControl        Boolean @default(false)
+  enableKittingAssembly       Boolean @default(false)
+  enableWaveManagement        Boolean @default(false)
+
   // Advanced Features
-  enableAdvancedAnalytics    Boolean  @default(false)
-  enablePredictiveAnalytics  Boolean  @default(false)
-  enableTaskAutomation       Boolean  @default(false)
-  enableExceptionHandling    Boolean  @default(false)
-  enablePerformanceTracking  Boolean  @default(false)
-  enableWorkflowOptimization Boolean  @default(false)
-  
+  enableAdvancedAnalytics    Boolean @default(false)
+  enablePredictiveAnalytics  Boolean @default(false)
+  enableTaskAutomation       Boolean @default(false)
+  enableExceptionHandling    Boolean @default(false)
+  enablePerformanceTracking  Boolean @default(false)
+  enableWorkflowOptimization Boolean @default(false)
+
   // === BUSINESS MODEL FLAGS ===
   // Service Type Flags
-  is3PL                       Boolean  @default(false)
-  isEcommerceFulfillment     Boolean  @default(false)
-  isManufacturerWarehouse    Boolean  @default(false)
-  isDistributionCenter       Boolean  @default(false)
-  isRetailWarehouse          Boolean  @default(false)
-  isColdStorage              Boolean  @default(false)
-  isHazmatFacility           Boolean  @default(false)
-  isCustomsWarehouse         Boolean  @default(false)
-  
+  is3PL                   Boolean @default(false)
+  isEcommerceFulfillment  Boolean @default(false)
+  isManufacturerWarehouse Boolean @default(false)
+  isDistributionCenter    Boolean @default(false)
+  isRetailWarehouse       Boolean @default(false)
+  isColdStorage           Boolean @default(false)
+  isHazmatFacility        Boolean @default(false)
+  isCustomsWarehouse      Boolean @default(false)
+
   // === BILLING & SERVICE FLAGS ===
-  enableStorageBilling        Boolean  @default(false)
-  enableHandlingCharges       Boolean  @default(false)
-  enableTransportationBilling Boolean  @default(false)
-  enableAccessorialCharges    Boolean  @default(false)
-  enableClientPortals         Boolean  @default(false)
-  enableMultiClientInventory  Boolean  @default(false)
-  enableSLATracking          Boolean  @default(false)
-  enableServiceLevelBilling  Boolean  @default(false)
-  enableUsageBasedBilling    Boolean  @default(false)
-  enableContractManagement   Boolean  @default(false)
-  
+  enableStorageBilling        Boolean @default(false)
+  enableHandlingCharges       Boolean @default(false)
+  enableTransportationBilling Boolean @default(false)
+  enableAccessorialCharges    Boolean @default(false)
+  enableClientPortals         Boolean @default(false)
+  enableMultiClientInventory  Boolean @default(false)
+  enableSLATracking           Boolean @default(false)
+  enableServiceLevelBilling   Boolean @default(false)
+  enableUsageBasedBilling     Boolean @default(false)
+  enableContractManagement    Boolean @default(false)
+
   // === INTEGRATION FLAGS ===
-  enableEDIIntegration       Boolean  @default(false)
-  enableAPIAccess            Boolean  @default(false)
-  enableBarcodeScanning      Boolean  @default(false)
-  enableRFIDTracking         Boolean  @default(false)
-  enableVoicePicking         Boolean  @default(false)
-  enableMobileScanning       Boolean  @default(false)
-  enableIoTSensors          Boolean  @default(false)
-  enableAutomatedSorting     Boolean  @default(false)
-  enableRoboticIntegration   Boolean  @default(false)
-  
+  enableEDIIntegration     Boolean @default(false)
+  enableAPIAccess          Boolean @default(false)
+  enableBarcodeScanning    Boolean @default(false)
+  enableRFIDTracking       Boolean @default(false)
+  enableVoicePicking       Boolean @default(false)
+  enableMobileScanning     Boolean @default(false)
+  enableIoTSensors         Boolean @default(false)
+  enableAutomatedSorting   Boolean @default(false)
+  enableRoboticIntegration Boolean @default(false)
+
   // Client/Customer Features
-  enableClientDashboards     Boolean  @default(false)
-  enableClientReporting      Boolean  @default(false)
-  enableClientNotifications  Boolean  @default(false)
-  enableClientDocuments      Boolean  @default(false)
-  enableClientOrderPortal    Boolean  @default(false)
-  enableClientInventoryView  Boolean  @default(false)
-  enableClientBilling        Boolean  @default(false)
-  
+  enableClientDashboards    Boolean @default(false)
+  enableClientReporting     Boolean @default(false)
+  enableClientNotifications Boolean @default(false)
+  enableClientDocuments     Boolean @default(false)
+  enableClientOrderPortal   Boolean @default(false)
+  enableClientInventoryView Boolean @default(false)
+  enableClientBilling       Boolean @default(false)
+
   // Compliance & Security
-  enableAuditTrail          Boolean  @default(false)
-  enableComplianceReporting Boolean  @default(false)
-  enableSecurityMonitoring  Boolean  @default(false)
-  enableAccessControl       Boolean  @default(false)
-  enableDataEncryption      Boolean  @default(false)
-  enableGDPRCompliance      Boolean  @default(false)
-  enableSOXCompliance       Boolean  @default(false)
+  enableAuditTrail          Boolean @default(false)
+  enableComplianceReporting Boolean @default(false)
+  enableSecurityMonitoring  Boolean @default(false)
+  enableAccessControl       Boolean @default(false)
+  enableDataEncryption      Boolean @default(false)
+  enableGDPRCompliance      Boolean @default(false)
+  enableSOXCompliance       Boolean @default(false)
   
+  // === ERP FEATURES ===
+  // Financial Management
+  enableAdvancedFinancials   Boolean @default(false)
+  enableDoubleEntryBookkeeping Boolean @default(false)
+  enableMultiCurrency        Boolean @default(false)
+  enableBudgetManagement     Boolean @default(false)
+  enableCostCenterAccounting Boolean @default(false)
+  enableFinancialReporting   Boolean @default(false)
+  enableCashFlowManagement   Boolean @default(false)
+  enableTaxManagement        Boolean @default(false)
+  
+  // Advanced Billing & Revenue
+  enableUsageBasedPricing    Boolean @default(false)
+  enableContractBilling      Boolean @default(false)
+  enableRecurringBilling     Boolean @default(false)
+  enableAdvancedInvoicing    Boolean @default(false)
+  enablePaymentProcessing    Boolean @default(false)
+  enableCreditManagement     Boolean @default(false)
+  enableRevenueRecognition   Boolean @default(false)
+  
+  // Expense & Procurement
+  enableExpenseManagement    Boolean @default(false)
+  enableProcurementWorkflow  Boolean @default(false)
+  enableVendorManagement     Boolean @default(false)
+  enablePurchaseOrders       Boolean @default(false)
+  enableApprovalWorkflows    Boolean @default(false)
+  
+  // Asset Management
+  enableAssetTracking        Boolean @default(false)
+  enableMaintenanceManagement Boolean @default(false)
+  enableDepreciationTracking Boolean @default(false)
+  enableFacilityManagement   Boolean @default(false)
+
   // Existing theme and integration settings
-  primaryColor               String?   @default("#007AFF")
-  secondaryColor             String?   @default("#FFFFFF")
-  accentColor                String?   @default("#FFAA00")
+  primaryColor               String?  @default("#007AFF")
+  secondaryColor             String?  @default("#FFFFFF")
+  accentColor                String?  @default("#FFAA00")
   customDomain               String?
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
@@ -249,37 +403,79 @@ model CompanySettings {
 }
 
 model Warehouse {
-  id                                                     String          @id @default(uuid())
+  id                                                     String            @id @default(uuid())
   name                                                   String
   address                                                String
-  createdAt                                              DateTime        @default(now())
-  updatedAt                                              DateTime        @default(now())
+  createdAt                                              DateTime          @default(now())
+  updatedAt                                              DateTime          @default(now())
   DamageReport                                           DamageReport[]
   DockSchedule                                           DockSchedule[]
   Location                                               Location[]
   StockMovement                                          StockMovement[]
-  TransferOrder_TransferOrder_fromWarehouseIdToWarehouse TransferOrder[] @relation("TransferOrder_fromWarehouseIdToWarehouse")
-  TransferOrder_TransferOrder_toWarehouseIdToWarehouse   TransferOrder[] @relation("TransferOrder_toWarehouseIdToWarehouse")
+  TransferOrder_TransferOrder_fromWarehouseIdToWarehouse TransferOrder[]   @relation("TransferOrder_fromWarehouseIdToWarehouse")
+  TransferOrder_TransferOrder_toWarehouseIdToWarehouse   TransferOrder[]   @relation("TransferOrder_toWarehouseIdToWarehouse")
   WarehouseItem                                          WarehouseItem[]
   shipments                                              Shipment[]
-  administrators                                         User[]          @relation("WarehouseAdmin")
+  administrators                                         User[]            @relation("WarehouseAdmin")
   warehouseReports                                       WarehouseReport[]
-  
+  blueprints                                             Blueprint[]
+
   // Pick & Pack Operations Relations
-  waves                                                  Wave[]
-  pickLists                                              PickList[]
-  packingSlips                                           PackingSlip[]
-  
+  waves        Wave[]
+  pickLists    PickList[]
+  packingSlips PackingSlip[]
+
   // Receiving & Put-Away Operations Relations
-  asns                                                   ASN[]
-  appointments                                           Appointment[]
-  dockDoors                                              DockDoor[]
-  receipts                                               Receipt[]
-  putAwayTasks                                           PutAwayTask[]
-  crossDockTasks                                         CrossDockTask[]
-  
+  asns           ASN[]
+  appointments   Appointment[]
+  dockDoors      DockDoor[]
+  receipts       Receipt[]
+  putAwayTasks   PutAwayTask[]
+  crossDockTasks CrossDockTask[]
+
   // Cycle Counting Relations
-  cycleCounts                                            CycleCount[]
+  cycleCounts CycleCount[]
+
+  // Loading/Unloading Relations
+  loadingTasks ShipmentLoadingTask[]
+  
+  // ERP Relations
+  expenses         Expense[]
+  invoiceLineItems InvoiceLineItem[]
+  
+  // Procurement Relations
+  purchaseRequisitions PurchaseRequisition[]
+  purchaseOrders       PurchaseOrder[]
+  
+  // Asset & Facility Relations
+  assets      Asset[]
+  facility    Facility?   @relation(fields: [facilityId], references: [id])
+  facilityId  String?
+  
+  // Utility Cost Allocation
+  utilityCostAllocations UtilityCostAllocation[]
+  utilityAllocationRules UtilityCostAllocationRule[]
+  
+  // Phase 4: Advanced Cost Management Relations
+  activityCenters         ActivityCenter[]
+  costAllocations         CostAllocation[]
+  serviceProfitability    ServiceProfitability[]
+}
+
+model Blueprint {
+  id          String    @id @default(uuid())
+  name        String
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  dimensions  Json      // { width: number, depth: number }
+  elements    Json      // Array of BlueprintElement objects
+  createdBy   String
+  user        User      @relation("BlueprintCreator", fields: [createdBy], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([warehouseId])
+  @@index([createdBy])
 }
 
 model DamageReport {
@@ -330,28 +526,36 @@ model InventoryItem {
   attributeValues SkuAttributeValue[]
 
   // Supplier for the inventory item
-  supplierId    String?
-  supplier      Supplier?      @relation(fields: [supplierId], references: [id])
-  
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+
   // Pick & Pack Operations Relations
   pickTasks     PickTask[]
   packingTasks  PackingTask[]
-  substitutions PickTask[] @relation("PickTaskSubstitution")
-  
+  substitutions PickTask[]    @relation("PickTaskSubstitution")
+
   // Receiving & Put-Away Operations Relations
-  asnItems      ASNItem[]
-  receiptItems  ReceiptItem[]
-  putAwayTasks  PutAwayTask[]
+  asnItems       ASNItem[]
+  receiptItems   ReceiptItem[]
+  putAwayTasks   PutAwayTask[]
   crossDockTasks CrossDockTask[]
-  
+
   // Cycle Counting Relations
   cycleCountItems CycleCountItem[] @relation("CycleCountInventoryItem")
+  
+  // ERP Relations
+  invoiceLineItems InvoiceLineItem[]
+  
+  // Procurement Relations
+  purchaseRequisitionItems PurchaseRequisitionItem[]
+  purchaseOrderItems       PurchaseOrderItem[]
 }
 
 model Location {
   id            String          @id
   warehouseId   String
   zone          String?
+  rack          String?
   aisle         String?
   shelf         String?
   bin           String?
@@ -361,17 +565,20 @@ model Location {
   updatedAt     DateTime        @default(now())
   Warehouse     Warehouse       @relation(fields: [warehouseId], references: [id])
   WarehouseItem WarehouseItem[]
-  
+
   // Pick & Pack Operations Relations
-  pickTasks     PickTask[]
-  
+  pickTasks PickTask[]
+
   // Receiving & Put-Away Operations Relations  
   putAwayFromTasks PutAwayTask[] @relation("PutAwayFromLocation")
   putAwayToTasks   PutAwayTask[] @relation("PutAwayToLocation")
-  
+
   // Cycle Counting Relations
-  cycleCountTasks   CycleCountTask[] @relation("CycleCountTaskLocation")
-  cycleCountItems   CycleCountItem[] @relation("CycleCountItemLocation")
+  cycleCountTasks CycleCountTask[] @relation("CycleCountTaskLocation")
+  cycleCountItems CycleCountItem[] @relation("CycleCountItemLocation")
+  
+  // Asset Relations  
+  assets          Asset[]
 
   @@index([warehouseId])
 }
@@ -402,8 +609,8 @@ model RouteShipment {
   shipmentId String
   order      Int
   status     RouteStopStatus @default(PENDING)
-  Route      Route    @relation(fields: [routeId], references: [id])
-  Shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  Route      Route           @relation(fields: [routeId], references: [id])
+  Shipment   Shipment        @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
 
   @@id([routeId, shipmentId])
 }
@@ -460,51 +667,86 @@ model TransporterLocation {
 }
 
 model Document {
-  id          String   @id @default(uuid())
-  shipmentId  String
-  type        String
-  url         String
-  createdAt   DateTime @default(now())
-  shipment    Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  id                String    @id @default(uuid())
+  name              String
+  url               String
+  type              String
+  relatedId         String
+  relatedType       String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  shipmentId        String?
+  Shipment          Shipment? @relation(fields: [shipmentId], references: [id])
+  quotes            Quote[]
+}
 
-  @@index([shipmentId])
+// =========================================================
+// Phase 5: Compliance & Audit – Audit Trail
+// =========================================================
+
+model AuditLog {
+  id          String       @id @default(uuid())
+  entityType  String       // e.g., "Shipment", "Invoice", "User"
+  entityId    String       // ID of the entity that was affected
+  action      AuditAction
+  changes     Json?
+  performedBy String?
+  tenantId    String
+  timestamp   DateTime     @default(now())
+  category    String?      // e.g., CRM, WAREHOUSE, FINANCIAL
+
+  user        User?        @relation("UserAuditLogs", fields: [performedBy], references: [id])
+  tenant      Tenant       @relation("TenantAuditLogs", fields: [tenantId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([performedBy])
+  @@index([timestamp])
+  @@index([category])
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
 }
 
 model ShipmentUpdate {
-  id          String          @id @default(uuid())
-  shipment    Shipment        @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
-  shipmentId  String
-  status      ShipmentStatus
-  notes       String?
-  createdAt   DateTime        @default(now())
+  id         String         @id @default(uuid())
+  shipment   Shipment       @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  shipmentId String
+  status     ShipmentStatus
+  notes      String?
+  createdAt  DateTime       @default(now())
 }
 
 // Notification model for user notifications
 model Notification {
-  id         String   @id @default(uuid())
-  userId     String
-  type       String
-  title      String
-  message    String?
-  metadata   Json?
-  isRead     Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  message   String?
+  metadata  Json?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
 
-  user       User     @relation("UserNotifications", fields: [userId], references: [id])
+  user User @relation("UserNotifications", fields: [userId], references: [id])
 }
 
 // Announcement model for admin mass announcements
 model Announcement {
-  id         String    @id @default(uuid())
-  title      String
-  message    String?
-  roles      String[]
-  userId     String?   // for individual announcement
-  metadata   Json?
-  authorId   String
-  createdAt  DateTime  @default(now())
+  id        String   @id @default(uuid())
+  title     String
+  message   String?
+  roles     String[]
+  userId    String? // for individual announcement
+  metadata  Json?
+  authorId  String
+  createdAt DateTime @default(now())
 
-  author     User      @relation("AnnouncementAuthor", fields: [authorId], references: [id])
+  author User @relation("AnnouncementAuthor", fields: [authorId], references: [id])
 }
 
 enum Role {
@@ -515,6 +757,10 @@ enum Role {
   dev
   transporter
   warehouse_admin
+  warehouse_worker
+  crm_admin
+  sales_rep
+  account_manager
 }
 
 enum ShipmentStatus {
@@ -581,10 +827,14 @@ model Account {
   contacts    Contact[]
   deals       Deal[]
   invoices    Invoice[]
+  invoicesEnhanced InvoiceEnhanced[]
   tenantId    String
   tenant      Tenant    @relation(fields: [tenantId], references: [id])
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  leads       Lead[]
+  tasks       Task[]
+  tickets     Ticket[]
 }
 
 model Contact {
@@ -616,6 +866,7 @@ model Deal {
   tenant    Tenant    @relation(fields: [tenantId], references: [id])
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+  quotes    Quote[]
 }
 
 // Billing: Define invoices and payments
@@ -648,7 +899,7 @@ model Invoice {
   issueDate     DateTime      @default(now())
   dueDate       DateTime
   payments      Payment[]
-  tenantId      String        
+  tenantId      String
   tenant        Tenant        @relation(fields: [tenantId], references: [id])
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -668,6 +919,433 @@ model Payment {
   updatedAt     DateTime      @updatedAt
 }
 
+// === ADVANCED ERP FINANCIAL MODELS ===
+
+// Chart of Accounts for double-entry bookkeeping
+model ChartOfAccounts {
+  id               String            @id @default(uuid())
+  accountCode      String            @unique
+  accountName      String
+  accountType      AccountType
+  parentId         String?
+  isActive         Boolean           @default(true)
+  description      String?
+  normalBalance    BalanceType       @default(DEBIT)
+  parent           ChartOfAccounts?  @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children         ChartOfAccounts[] @relation("AccountHierarchy")
+  generalLedgerEntries GeneralLedger[]
+  budgetAllocations BudgetAllocation[]
+  budgetForecasts   BudgetForecast[]
+  varianceAnalyses  VarianceAnalysis[]
+  tenantId         String
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([tenantId, accountType])
+  @@index([accountCode])
+}
+
+// General Ledger for all financial transactions
+model GeneralLedger {
+  id              String          @id @default(uuid())
+  transactionDate DateTime
+  accountId       String
+  debitAmount     Decimal?        @db.Decimal(15, 2)
+  creditAmount    Decimal?        @db.Decimal(15, 2)
+  description     String
+  referenceType   String?         // 'INVOICE', 'PAYMENT', 'SHIPMENT', 'WAREHOUSE_ACTIVITY'
+  referenceId     String?         // Links to source transaction
+  journalEntryId  String
+  account         ChartOfAccounts @relation(fields: [accountId], references: [id])
+  journalEntry    JournalEntry    @relation(fields: [journalEntryId], references: [id])
+  tenantId        String
+  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+  createdAt       DateTime        @default(now())
+
+  @@index([tenantId, transactionDate])
+  @@index([accountId])
+  @@index([referenceType, referenceId])
+}
+
+// Journal Entries for double-entry bookkeeping
+model JournalEntry {
+  id                String          @id @default(uuid())
+  entryNumber       String          @unique
+  transactionDate   DateTime
+  description       String
+  totalAmount       Decimal         @db.Decimal(15, 2)
+  referenceType     String?         // Source of the entry
+  referenceId       String?
+  isReversed        Boolean         @default(false)
+  reversalEntryId   String?         @unique
+  reversalEntry     JournalEntry?   @relation("JournalReversal", fields: [reversalEntryId], references: [id])
+  reversedBy        JournalEntry?   @relation("JournalReversal")
+  status            JournalStatus   @default(DRAFT)
+  approvedBy        String?
+  approver          User?           @relation("JournalApprover", fields: [approvedBy], references: [id])
+  ledgerEntries     GeneralLedger[]
+  tenantId          String
+  tenant            Tenant          @relation(fields: [tenantId], references: [id])
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([tenantId, transactionDate])
+  @@index([status])
+}
+
+// Cost Centers for expense allocation
+model CostCenter {
+  id          String     @id @default(uuid())
+  code        String     @unique
+  name        String
+  description String?
+  managerId   String?
+  manager     User?      @relation("CostCenterManager", fields: [managerId], references: [id])
+  isActive    Boolean    @default(true)
+  expenses    Expense[]
+  budgets     Budget[]
+  tenantId    String
+  tenant      Tenant     @relation(fields: [tenantId], references: [id])
+  
+  // Utility Cost Allocations
+  utilityCostAllocations UtilityCostAllocation[]
+  utilityAllocationRules UtilityCostAllocationRule[]
+  
+  // Phase 4: Advanced Cost Management Relations
+  activityCenters        ActivityCenter[]
+  budgetForecasts        BudgetForecast[]
+  varianceAnalyses       VarianceAnalysis[]
+  
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([tenantId])
+}
+
+// Expense tracking and categorization
+model Expense {
+  id            String      @id @default(uuid())
+  expenseNumber String      @unique
+  description   String
+  amount        Decimal     @db.Decimal(15, 2)
+  expenseDate   DateTime
+  category      ExpenseCategory
+  costCenterId  String?
+  costCenter    CostCenter? @relation(fields: [costCenterId], references: [id])
+  supplierId    String?
+  supplier      Supplier?   @relation(fields: [supplierId], references: [id])
+  warehouseId   String?
+  warehouse     Warehouse?  @relation(fields: [warehouseId], references: [id])
+  receiptUrl    String?     // Link to receipt/invoice image
+  approvedBy    String?
+  approver      User?       @relation("ExpenseApprover", fields: [approvedBy], references: [id])
+  status        ExpenseStatus @default(PENDING)
+  tenantId      String
+  tenant        Tenant      @relation(fields: [tenantId], references: [id])
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([tenantId, expenseDate])
+  @@index([costCenterId])
+  @@index([status])
+}
+
+// Budget planning and tracking
+model Budget {
+  id           String             @id @default(uuid())
+  name         String
+  budgetYear   Int
+  budgetType   BudgetType         @default(ANNUAL)
+  totalAmount  Decimal            @db.Decimal(15, 2)
+  costCenterId String?
+  costCenter   CostCenter?        @relation(fields: [costCenterId], references: [id])
+  status       BudgetStatus       @default(DRAFT)
+  allocations  BudgetAllocation[]
+  tenantId     String
+  tenant       Tenant             @relation(fields: [tenantId], references: [id])
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([tenantId, budgetYear])
+}
+
+// Budget allocation by account
+model BudgetAllocation {
+  id               String          @id @default(uuid())
+  budgetId         String
+  accountId        String
+  allocatedAmount  Decimal         @db.Decimal(15, 2)
+  spentAmount      Decimal         @default(0) @db.Decimal(15, 2)
+  remainingAmount  Decimal         @default(0) @db.Decimal(15, 2)
+  budget           Budget          @relation(fields: [budgetId], references: [id])
+  account          ChartOfAccounts @relation(fields: [accountId], references: [id])
+  budgetScenario   BudgetScenario? @relation(fields: [budgetScenarioId], references: [id])
+  budgetScenarioId String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([budgetId, accountId])
+  @@index([budgetId])
+}
+
+// Currency management for multi-currency support
+model Currency {
+  id           String            @id @default(uuid())
+  code         String            @unique // USD, EUR, GBP, etc.
+  name         String
+  symbol       String
+  isBase       Boolean           @default(false)
+  isActive     Boolean           @default(true)
+  exchangeRates ExchangeRate[]
+  invoices     InvoiceEnhanced[]
+  tenantId     String
+  tenant       Tenant            @relation(fields: [tenantId], references: [id])
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([tenantId])
+}
+
+// Exchange rates for currency conversion
+model ExchangeRate {
+  id           String   @id @default(uuid())
+  fromCurrency String
+  toCurrency   String
+  rate         Decimal  @db.Decimal(10, 6)
+  effectiveDate DateTime
+  currency     Currency @relation(fields: [fromCurrency], references: [code])
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  createdAt    DateTime @default(now())
+
+  @@unique([fromCurrency, toCurrency, effectiveDate])
+  @@index([tenantId, effectiveDate])
+}
+
+// Enhanced Invoice model with advanced features
+model InvoiceEnhanced {
+  id                String              @id @default(uuid())
+  invoiceNumber     String              @unique
+  accountId         String
+  customerId        String?             // Link to customer/client
+  currencyId        String
+  subtotal          Decimal             @db.Decimal(15, 2)
+  taxAmount         Decimal             @default(0) @db.Decimal(15, 2)
+  discountAmount    Decimal             @default(0) @db.Decimal(15, 2)
+  totalAmount       Decimal             @db.Decimal(15, 2)
+  amountPaid        Decimal             @default(0) @db.Decimal(15, 2)
+  balanceDue        Decimal             @db.Decimal(15, 2)
+  status            InvoiceStatusEnhanced @default(DRAFT)
+  invoiceDate       DateTime            @default(now())
+  dueDate           DateTime
+  paymentTerms      String?             // "Net 30", "Due on Receipt", etc.
+  notes             String?
+  internalNotes     String?
+  poNumber          String?             // Customer PO number
+  billingType       BillingType         @default(SERVICE)
+  serviceStartDate  DateTime?
+  serviceEndDate    DateTime?
+  account           Account             @relation(fields: [accountId], references: [id])
+  customer          User?               @relation("CustomerInvoices", fields: [customerId], references: [id])
+  currency          Currency            @relation(fields: [currencyId], references: [id])
+  lineItems         InvoiceLineItem[]
+  paymentsEnhanced  PaymentEnhanced[]
+  tenantId          String
+  tenant            Tenant              @relation(fields: [tenantId], references: [id])
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([tenantId, invoiceDate])
+  @@index([status])
+  @@index([customerId])
+}
+
+// Invoice line items for detailed billing
+model InvoiceLineItem {
+  id                String          @id @default(uuid())
+  invoiceId         String
+  description       String
+  quantity          Decimal         @db.Decimal(10, 3)
+  unitPrice         Decimal         @db.Decimal(15, 2)
+  lineTotal         Decimal         @db.Decimal(15, 2)
+  taxRate           Decimal?        @default(0) @db.Decimal(5, 4)
+  discountRate      Decimal?        @default(0) @db.Decimal(5, 4)
+  serviceType       ServiceType?    // For 3PL billing
+  warehouseId       String?
+  shipmentId        String?
+  inventoryItemId   String?
+  startDate         DateTime?
+  endDate           DateTime?
+  invoice           InvoiceEnhanced @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  warehouse         Warehouse?      @relation(fields: [warehouseId], references: [id])
+  shipment          Shipment?       @relation(fields: [shipmentId], references: [id])
+  inventoryItem     InventoryItem?  @relation(fields: [inventoryItemId], references: [id])
+  createdAt         DateTime        @default(now())
+
+  @@index([invoiceId])
+}
+
+// Enhanced Payment model
+model PaymentEnhanced {
+  id                String          @id @default(uuid())
+  paymentNumber     String          @unique
+  invoiceId         String
+  amount            Decimal         @db.Decimal(15, 2)
+  paymentDate       DateTime
+  method            PaymentMethodEnhanced
+  referenceNumber   String?         // Check number, transaction ID, etc.
+  bankAccount       String?
+  notes             String?
+  processedBy       String?
+  processor         User?           @relation("PaymentProcessor", fields: [processedBy], references: [id])
+  status            PaymentStatus   @default(PENDING)
+  invoice           InvoiceEnhanced @relation(fields: [invoiceId], references: [id])
+  tenantId          String
+  tenant            Tenant          @relation(fields: [tenantId], references: [id])
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([tenantId, paymentDate])
+  @@index([status])
+}
+
+// Financial reporting periods
+model ReportingPeriod {
+  id        String       @id @default(uuid())
+  name      String       // "Q1 2024", "January 2024", etc.
+  startDate DateTime
+  endDate   DateTime
+  status    PeriodStatus @default(OPEN)
+  tenantId  String
+  tenant    Tenant       @relation(fields: [tenantId], references: [id])
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([tenantId, startDate, endDate])
+}
+
+// === ERP ENUMS ===
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum BalanceType {
+  DEBIT
+  CREDIT
+}
+
+enum JournalStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  POSTED
+  REVERSED
+}
+
+enum ExpenseCategory {
+  OFFICE_SUPPLIES
+  UTILITIES
+  RENT
+  EQUIPMENT
+  MAINTENANCE
+  FUEL
+  INSURANCE
+  PROFESSIONAL_SERVICES
+  MARKETING
+  TRAVEL
+  MEALS
+  OTHER
+}
+
+enum ExpenseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
+enum BudgetType {
+  ANNUAL
+  QUARTERLY
+  MONTHLY
+  PROJECT
+}
+
+enum BudgetStatus {
+  DRAFT
+  APPROVED
+  ACTIVE
+  CLOSED
+}
+
+enum InvoiceStatusEnhanced {
+  DRAFT
+  PENDING_APPROVAL
+  SENT
+  VIEWED
+  PARTIAL_PAYMENT
+  PAID
+  OVERDUE
+  CANCELLED
+  REFUNDED
+}
+
+enum BillingType {
+  SERVICE
+  PRODUCT
+  STORAGE
+  HANDLING
+  TRANSPORTATION
+  ACCESSORIAL
+}
+
+enum ServiceType {
+  STORAGE
+  INBOUND_HANDLING
+  OUTBOUND_HANDLING
+  PICK_PACK
+  CROSS_DOCK
+  VALUE_ADDED_SERVICE
+  TRANSPORTATION
+  FUEL_SURCHARGE
+  ACCESSORIAL
+}
+
+enum PaymentMethodEnhanced {
+  CASH
+  CHECK
+  CREDIT_CARD
+  DEBIT_CARD
+  BANK_TRANSFER
+  ACH
+  WIRE_TRANSFER
+  PAYPAL
+  STRIPE
+  SQUARE
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum PeriodStatus {
+  OPEN
+  CLOSED
+  LOCKED
+}
+
 // SKU Attributes Definition
 enum AttributeType {
   STRING
@@ -675,26 +1353,26 @@ enum AttributeType {
 }
 
 model SkuAttributeDefinition {
-  id        String       @id @default(uuid())
-  key       String       @unique
+  id        String        @id @default(uuid())
+  key       String        @unique
   label     String
   type      AttributeType
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 
-  values    SkuAttributeValue[]
+  values SkuAttributeValue[]
 }
 
 model SkuAttributeValue {
-  inventoryItemId        String
-  attributeDefinitionId  String
-  valueString            String?
-  valueNumber            Float?
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  inventoryItemId       String
+  attributeDefinitionId String
+  valueString           String?
+  valueNumber           Float?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  InventoryItem          InventoryItem @relation(fields: [inventoryItemId], references: [id])
-  attributeDefinition    SkuAttributeDefinition @relation(fields: [attributeDefinitionId], references: [id])
+  InventoryItem       InventoryItem          @relation(fields: [inventoryItemId], references: [id])
+  attributeDefinition SkuAttributeDefinition @relation(fields: [attributeDefinitionId], references: [id])
 
   @@id([inventoryItemId, attributeDefinitionId])
 }
@@ -705,17 +1383,59 @@ enum IncidentType {
   LOSS
 }
 
-// Supplier model
+// Supplier model - Enhanced for procurement
 model Supplier {
-  id          String           @id @default(uuid())
-  name        String
-  contactInfo String?
-
-  InventoryItem InventoryItem[]
+  id              String        @id @default(uuid())
+  name            String
+  contactInfo     String?
+  email           String?
+  phone           String?
+  address         String?
+  website         String?
+  taxId           String?
   
-  // Receiving & Put-Away Operations Relations
-  asns          ASN[]
-  appointments  Appointment[]
+  // Procurement enhancements
+  supplierType    SupplierType  @default(VENDOR)
+  status          SupplierStatus @default(ACTIVE)
+  paymentTerms    String?
+  creditLimit     Decimal?
+  currency        String        @default("USD")
+  leadTime        Int?          // Days
+  minimumOrder    Decimal?
+  
+  // Performance tracking
+  performanceScore     Float?         @default(0)
+  qualityRating       Float?         @default(0)
+  deliveryRating      Float?         @default(0)
+  serviceRating       Float?         @default(0)
+  costRating          Float?         @default(0)
+  
+  // Relationships
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @default(now()) @updatedAt
+
+  // Existing relations
+  InventoryItem   InventoryItem[]
+  asns            ASN[]
+  appointments    Appointment[]
+  expenses        Expense[]
+  
+  // New procurement relations
+  purchaseOrders      PurchaseOrder[]
+  purchaseRequisitions PurchaseRequisition[]
+  vendorScorecard     VendorScorecard[]
+  purchaseContracts   PurchaseContract[]
+  supplierCertifications SupplierCertification[]
+  performanceMetrics  SupplierPerformanceMetric[]
+  priceQuotes        PriceQuote[]
+  supplierInvoices   SupplierInvoice[]
+  procurementSpend   ProcurementSpend[]
+  
+  // Asset Relations
+  assets             Asset[]
+  
+  @@index([status, supplierType])
+  @@index([performanceScore])
 }
 
 /// Warehouse report for scheduled daily summaries
@@ -732,36 +1452,38 @@ model WarehouseReport {
 
 // Chat feature models
 model Conversation {
-  id              String                      @id @default(uuid())
-  name            String?                     // Optional custom name for group chats
-  participants    ConversationParticipant[]
-  messages        Message[]
-  createdAt       DateTime                    @default(now())
-  updatedAt       DateTime                    @updatedAt
+  id           String                    @id @default(uuid())
+  name         String? // Optional custom name for group chats
+  participants ConversationParticipant[]
+  messages     Message[]
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
 }
 
 model ConversationParticipant {
-  id              String                      @id @default(uuid())
-  conversationId  String
-  userId          String
-  conversation    Conversation                @relation(fields: [conversationId], references: [id])
-  user            User                        @relation(fields: [userId], references: [id])
+  id             String       @id @default(uuid())
+  conversationId String
+  userId         String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  user           User         @relation(fields: [userId], references: [id])
+
   @@index([conversationId, userId])
 }
 
 model Message {
-  id              String                      @id @default(uuid())
-  conversationId  String
-  senderId        String
-  content         String?
-  contentType     String                      @default("text")
-  fileUrl         String?
-  status          MessageStatus               @default(SENT)
-  deliveredAt     DateTime?
-  readAt          DateTime?
-  createdAt       DateTime                    @default(now())
-  conversation    Conversation                @relation(fields: [conversationId], references: [id])
-  sender          User                        @relation(fields: [senderId], references: [id])
+  id             String        @id @default(uuid())
+  conversationId String
+  senderId       String
+  content        String?
+  contentType    String        @default("text")
+  fileUrl        String?
+  status         MessageStatus @default(SENT)
+  deliveredAt    DateTime?
+  readAt         DateTime?
+  createdAt      DateTime      @default(now())
+  conversation   Conversation  @relation(fields: [conversationId], references: [id])
+  sender         User          @relation(fields: [senderId], references: [id])
+
   @@index([conversationId])
 }
 
@@ -776,30 +1498,30 @@ enum MessageStatus {
 
 // Wave represents a batch of orders to be picked together
 model Wave {
-  id              String      @id @default(uuid())
-  waveNumber      String      @unique
-  warehouseId     String
-  status          WaveStatus  @default(CREATED)
-  priority        Int         @default(1)
+  id               String     @id @default(uuid())
+  waveNumber       String     @unique
+  warehouseId      String
+  status           WaveStatus @default(CREATED)
+  priority         Int        @default(1)
   plannedStartTime DateTime?
-  actualStartTime DateTime?
-  plannedEndTime  DateTime?
-  actualEndTime   DateTime?
-  createdBy       String
+  actualStartTime  DateTime?
+  plannedEndTime   DateTime?
+  actualEndTime    DateTime?
+  createdBy        String
   assignedPickerId String?
-  totalOrders     Int         @default(0)
-  totalItems      Int         @default(0)
-  completedItems  Int         @default(0)
-  notes           String?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  totalOrders      Int        @default(0)
+  totalItems       Int        @default(0)
+  completedItems   Int        @default(0)
+  notes            String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 
   // Relations
-  warehouse       Warehouse   @relation(fields: [warehouseId], references: [id])
-  creator         User        @relation("WaveCreator", fields: [createdBy], references: [id])
-  assignedPicker  User?       @relation("WaveAssignedPicker", fields: [assignedPickerId], references: [id])
-  pickLists       PickList[]
-  waveOrders      WaveOrder[]
+  warehouse      Warehouse   @relation(fields: [warehouseId], references: [id])
+  creator        User        @relation("WaveCreator", fields: [createdBy], references: [id])
+  assignedPicker User?       @relation("WaveAssignedPicker", fields: [assignedPickerId], references: [id])
+  pickLists      PickList[]
+  waveOrders     WaveOrder[]
 
   @@index([warehouseId, status])
   @@index([assignedPickerId])
@@ -814,8 +1536,8 @@ model WaveOrder {
   addedAt    DateTime @default(now())
 
   // Relations
-  wave       Wave     @relation(fields: [waveId], references: [id], onDelete: Cascade)
-  shipment   Shipment @relation(fields: [shipmentId], references: [id])
+  wave     Wave     @relation(fields: [waveId], references: [id], onDelete: Cascade)
+  shipment Shipment @relation(fields: [shipmentId], references: [id])
 
   @@unique([waveId, shipmentId])
   @@index([waveId])
@@ -823,31 +1545,34 @@ model WaveOrder {
 
 // Pick list generated for a wave
 model PickList {
-  id              String         @id @default(uuid())
-  listNumber      String         @unique
-  waveId          String
-  warehouseId     String
+  id               String         @id @default(uuid())
+  listNumber       String         @unique
+  waveId           String
+  warehouseId      String
   assignedPickerId String?
-  status          PickListStatus @default(PENDING)
-  pickingMethod   PickingMethod  @default(BATCH)
-  zone            String?
+  status           PickListStatus @default(PENDING)
+  pickingMethod    PickingMethod  @default(BATCH)
+  zone             String?
   plannedStartTime DateTime?
-  actualStartTime DateTime?
-  plannedEndTime  DateTime?
-  actualEndTime   DateTime?
-  totalTasks      Int            @default(0)
-  completedTasks  Int            @default(0)
-  optimizedRoute  Json?          // Optimized picking route
-  notes           String?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  actualStartTime  DateTime?
+  plannedEndTime   DateTime?
+  actualEndTime    DateTime?
+  totalTasks       Int            @default(0)
+  completedTasks   Int            @default(0)
+  optimizedRoute   Json? // Optimized picking route
+  notes            String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
   // Relations
-  wave            Wave           @relation(fields: [waveId], references: [id], onDelete: Cascade)
-  warehouse       Warehouse      @relation(fields: [warehouseId], references: [id])
-  assignedPicker  User?          @relation("PickListAssignedPicker", fields: [assignedPickerId], references: [id])
-  pickTasks       PickTask[]
-  packingSlips    PackingSlip[]
+  wave           Wave          @relation(fields: [waveId], references: [id], onDelete: Cascade)
+  warehouse      Warehouse     @relation(fields: [warehouseId], references: [id])
+  assignedPicker User?         @relation("PickListAssignedPicker", fields: [assignedPickerId], references: [id])
+  pickTasks      PickTask[]
+  packingSlips   PackingSlip[]
+  
+  // Phase 4: Advanced Cost Management Relations
+  activityCosts  ActivityCost[]
 
   @@index([waveId])
   @@index([assignedPickerId, status])
@@ -863,14 +1588,14 @@ model PickTask {
   quantityRequired Int
   quantityPicked   Int            @default(0)
   status           PickTaskStatus @default(PENDING)
-  pickSequence     Int            // Order in which to pick
+  pickSequence     Int // Order in which to pick
   pickerId         String?
   pickedAt         DateTime?
   verifiedBy       String?
   verifiedAt       DateTime?
   qcPassed         Boolean?
   qcNotes          String?
-  substitutionId   String?        // If item was substituted
+  substitutionId   String? // If item was substituted
   damageQuantity   Int            @default(0)
   notes            String?
   barcodeScanned   Boolean        @default(false)
@@ -878,13 +1603,13 @@ model PickTask {
   updatedAt        DateTime       @updatedAt
 
   // Relations
-  pickList         PickList       @relation(fields: [pickListId], references: [id], onDelete: Cascade)
-  shipment         Shipment       @relation(fields: [shipmentId], references: [id])
-  inventoryItem    InventoryItem  @relation(fields: [inventoryItemId], references: [id])
-  location         Location       @relation(fields: [locationId], references: [id])
-  picker           User?          @relation("PickTaskPicker", fields: [pickerId], references: [id])
-  verifier         User?          @relation("PickTaskVerifier", fields: [verifiedBy], references: [id])
-  substitution     InventoryItem? @relation("PickTaskSubstitution", fields: [substitutionId], references: [id])
+  pickList      PickList       @relation(fields: [pickListId], references: [id], onDelete: Cascade)
+  shipment      Shipment       @relation(fields: [shipmentId], references: [id])
+  inventoryItem InventoryItem  @relation(fields: [inventoryItemId], references: [id])
+  location      Location       @relation(fields: [locationId], references: [id])
+  picker        User?          @relation("PickTaskPicker", fields: [pickerId], references: [id])
+  verifier      User?          @relation("PickTaskVerifier", fields: [verifiedBy], references: [id])
+  substitution  InventoryItem? @relation("PickTaskSubstitution", fields: [substitutionId], references: [id])
 
   @@index([pickListId, pickSequence])
   @@index([status, pickerId])
@@ -893,34 +1618,37 @@ model PickTask {
 
 // Packing slip generated for shipments
 model PackingSlip {
-  id              String            @id @default(uuid())
-  slipNumber      String            @unique
-  pickListId      String?
-  shipmentId      String
-  warehouseId     String
-  packerId        String?
-  status          PackingSlipStatus @default(PENDING)
-  packingMethod   PackingMethod     @default(MANUAL)
-  totalItems      Int               @default(0)
-  packedItems     Int               @default(0)
-  totalWeight     Float?
-  totalDimensions Json?             // {length, width, height}
-  packingStartedAt DateTime?
-  packingCompletedAt DateTime?
-  qcCompletedAt   DateTime?
-  shippingLabelGenerated Boolean    @default(false)
-  trackingNumber  String?
-  notes           String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  id                     String            @id @default(uuid())
+  slipNumber             String            @unique
+  pickListId             String?
+  shipmentId             String
+  warehouseId            String
+  packerId               String?
+  status                 PackingSlipStatus @default(PENDING)
+  packingMethod          PackingMethod     @default(MANUAL)
+  totalItems             Int               @default(0)
+  packedItems            Int               @default(0)
+  totalWeight            Float?
+  totalDimensions        Json? // {length, width, height}
+  packingStartedAt       DateTime?
+  packingCompletedAt     DateTime?
+  qcCompletedAt          DateTime?
+  shippingLabelGenerated Boolean           @default(false)
+  trackingNumber         String?
+  notes                  String?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
 
   // Relations
-  pickList        PickList?         @relation(fields: [pickListId], references: [id])
-  shipment        Shipment          @relation(fields: [shipmentId], references: [id])
-  warehouse       Warehouse         @relation(fields: [warehouseId], references: [id])
-  packer          User?             @relation("PackingSlipPacker", fields: [packerId], references: [id])
-  packingTasks    PackingTask[]
-  packages        Package[]
+  pickList     PickList?     @relation(fields: [pickListId], references: [id])
+  shipment     Shipment      @relation(fields: [shipmentId], references: [id])
+  warehouse    Warehouse     @relation(fields: [warehouseId], references: [id])
+  packer       User?         @relation("PackingSlipPacker", fields: [packerId], references: [id])
+  packingTasks PackingTask[]
+  packages     Package[]
+  
+  // Phase 4: Advanced Cost Management Relations
+  activityCosts ActivityCost[]
 
   @@index([shipmentId])
   @@index([status, packerId])
@@ -928,44 +1656,44 @@ model PackingSlip {
 
 // Individual packing task for items
 model PackingTask {
-  id               String         @id @default(uuid())
-  packingSlipId    String
-  inventoryItemId  String
-  quantityToPack   Int
-  quantityPacked   Int            @default(0)
-  status           PackingTaskStatus @default(PENDING)
-  packageId        String?
-  packedAt         DateTime?
-  notes            String?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  id              String            @id @default(uuid())
+  packingSlipId   String
+  inventoryItemId String
+  quantityToPack  Int
+  quantityPacked  Int               @default(0)
+  status          PackingTaskStatus @default(PENDING)
+  packageId       String?
+  packedAt        DateTime?
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
   // Relations
-  packingSlip      PackingSlip    @relation(fields: [packingSlipId], references: [id], onDelete: Cascade)
-  inventoryItem    InventoryItem  @relation(fields: [inventoryItemId], references: [id])
-  package          Package?       @relation(fields: [packageId], references: [id])
+  packingSlip   PackingSlip   @relation(fields: [packingSlipId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  package       Package?      @relation(fields: [packageId], references: [id])
 
   @@index([packingSlipId])
 }
 
 // Package/box used for packing
 model Package {
-  id              String         @id @default(uuid())
-  packageNumber   String         @unique
-  packingSlipId   String
-  packageType     PackageType    @default(BOX)
-  dimensions      Json?          // {length, width, height}
-  weight          Float?
-  maxWeight       Float?
-  trackingNumber  String?
-  status          PackageStatus  @default(OPEN)
-  sealedAt        DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id             String        @id @default(uuid())
+  packageNumber  String        @unique
+  packingSlipId  String
+  packageType    PackageType   @default(BOX)
+  dimensions     Json? // {length, width, height}
+  weight         Float?
+  maxWeight      Float?
+  trackingNumber String?
+  status         PackageStatus @default(OPEN)
+  sealedAt       DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   // Relations
-  packingSlip     PackingSlip    @relation(fields: [packingSlipId], references: [id], onDelete: Cascade)
-  packingTasks    PackingTask[]
+  packingSlip  PackingSlip   @relation(fields: [packingSlipId], references: [id], onDelete: Cascade)
+  packingTasks PackingTask[]
 
   @@index([packingSlipId])
 }
@@ -992,10 +1720,10 @@ enum PickListStatus {
 }
 
 enum PickingMethod {
-  SINGLE_ORDER    // Pick one order at a time
-  BATCH          // Pick multiple orders together
-  ZONE           // Pick by warehouse zone
-  WAVE           // Pick entire wave
+  SINGLE_ORDER // Pick one order at a time
+  BATCH // Pick multiple orders together
+  ZONE // Pick by warehouse zone
+  WAVE // Pick entire wave
 }
 
 enum PickTaskStatus {
@@ -1052,37 +1780,37 @@ enum PackageStatus {
 
 // Advanced Shipping Notice - notification of incoming shipments
 model ASN {
-  id                String      @id @default(uuid())
-  asnNumber         String      @unique
-  supplierId        String?
-  carrierName       String?
-  driverName        String?
-  driverPhone       String?
-  vehicleInfo       String?
-  warehouseId       String
-  expectedArrival   DateTime
-  actualArrival     DateTime?
-  status            ASNStatus   @default(PENDING)
-  totalPallets      Int         @default(0)
-  totalCases        Int         @default(0)
-  totalWeight       Float?
-  referenceNumber   String?
-  poNumber          String?
-  trailerNumber     String?
-  sealNumber        String?
-  temperature       Float?      // For temperature-controlled shipments
-  specialHandling   String?     // Fragile, hazmat, etc.
-  notes             String?
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  id              String    @id @default(uuid())
+  asnNumber       String    @unique
+  supplierId      String?
+  carrierName     String?
+  driverName      String?
+  driverPhone     String?
+  vehicleInfo     String?
+  warehouseId     String
+  expectedArrival DateTime
+  actualArrival   DateTime?
+  status          ASNStatus @default(PENDING)
+  totalPallets    Int       @default(0)
+  totalCases      Int       @default(0)
+  totalWeight     Float?
+  referenceNumber String?
+  poNumber        String?
+  trailerNumber   String?
+  sealNumber      String?
+  temperature     Float? // For temperature-controlled shipments
+  specialHandling String? // Fragile, hazmat, etc.
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   // Relations
-  warehouse         Warehouse   @relation(fields: [warehouseId], references: [id])
-  supplier          Supplier?   @relation(fields: [supplierId], references: [id])
-  asnItems          ASNItem[]
-  appointments      Appointment[]
-  receipts          Receipt[]
-  crossDockTasks    CrossDockTask[]
+  warehouse      Warehouse       @relation(fields: [warehouseId], references: [id])
+  supplier       Supplier?       @relation(fields: [supplierId], references: [id])
+  asnItems       ASNItem[]
+  appointments   Appointment[]
+  receipts       Receipt[]
+  crossDockTasks CrossDockTask[]
 
   @@index([warehouseId, status])
   @@index([expectedArrival])
@@ -1103,9 +1831,9 @@ model ASNItem {
   createdAt       DateTime      @default(now())
 
   // Relations
-  asn             ASN           @relation(fields: [asnId], references: [id], onDelete: Cascade)
-  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
-  receiptItems    ReceiptItem[]
+  asn           ASN           @relation(fields: [asnId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  receiptItems  ReceiptItem[]
 
   @@index([asnId])
   @@index([inventoryItemId])
@@ -1113,35 +1841,35 @@ model ASNItem {
 
 // Appointment scheduling for dock doors
 model Appointment {
-  id              String            @id @default(uuid())
-  appointmentNumber String          @unique
-  asnId           String?
-  warehouseId     String
-  dockDoorId      String?
-  supplierId      String?
-  carrierName     String?
-  driverName      String?
-  driverPhone     String?
-  scheduledDate   DateTime
-  scheduledTimeSlot String          // e.g., "08:00-10:00"
-  duration        Int               @default(120) // minutes
-  status          AppointmentStatus @default(SCHEDULED)
-  appointmentType AppointmentType   @default(RECEIVING)
-  priority        Int               @default(1)
+  id                  String            @id @default(uuid())
+  appointmentNumber   String            @unique
+  asnId               String?
+  warehouseId         String
+  dockDoorId          String?
+  supplierId          String?
+  carrierName         String?
+  driverName          String?
+  driverPhone         String?
+  scheduledDate       DateTime
+  scheduledTimeSlot   String // e.g., "08:00-10:00"
+  duration            Int               @default(120) // minutes
+  status              AppointmentStatus @default(SCHEDULED)
+  appointmentType     AppointmentType   @default(RECEIVING)
+  priority            Int               @default(1)
   specialRequirements String?
-  equipment       String?           // Forklift, dock plate, etc.
-  checkedInAt     DateTime?
-  checkedOutAt    DateTime?
-  actualDuration  Int?              // actual minutes
-  notes           String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  equipment           String? // Forklift, dock plate, etc.
+  checkedInAt         DateTime?
+  checkedOutAt        DateTime?
+  actualDuration      Int? // actual minutes
+  notes               String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 
   // Relations
-  warehouse       Warehouse         @relation(fields: [warehouseId], references: [id])
-  asn             ASN?              @relation(fields: [asnId], references: [id])
-  supplier        Supplier?         @relation(fields: [supplierId], references: [id])
-  dockDoor        DockDoor?         @relation(fields: [dockDoorId], references: [id])
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  asn       ASN?      @relation(fields: [asnId], references: [id])
+  supplier  Supplier? @relation(fields: [supplierId], references: [id])
+  dockDoor  DockDoor? @relation(fields: [dockDoorId], references: [id])
 
   @@index([warehouseId, scheduledDate])
   @@index([status])
@@ -1149,23 +1877,24 @@ model Appointment {
 
 // Dock door management
 model DockDoor {
-  id              String        @id @default(uuid())
-  doorNumber      String
-  warehouseId     String
-  doorType        DockDoorType  @default(RECEIVING)
-  status          DockDoorStatus @default(AVAILABLE)
-  equipment       String?       // Dock plate, forklift access, etc.
-  maxTrailerSize  String?       // 53ft, 48ft, etc.
-  heightRestriction Float?      // in feet
-  isTemperatureControlled Boolean @default(false)
-  notes           String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id                      String         @id @default(uuid())
+  doorNumber              String
+  warehouseId             String
+  doorType                DockDoorType   @default(RECEIVING)
+  status                  DockDoorStatus @default(AVAILABLE)
+  equipment               String? // Dock plate, forklift access, etc.
+  maxTrailerSize          String? // 53ft, 48ft, etc.
+  heightRestriction       Float? // in feet
+  isTemperatureControlled Boolean        @default(false)
+  notes                   String?
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
 
   // Relations
-  warehouse       Warehouse     @relation(fields: [warehouseId], references: [id])
-  appointments    Appointment[]
-  receipts        Receipt[]
+  warehouse    Warehouse             @relation(fields: [warehouseId], references: [id])
+  appointments Appointment[]
+  receipts     Receipt[]
+  loadingTasks ShipmentLoadingTask[]
 
   @@unique([warehouseId, doorNumber])
   @@index([warehouseId])
@@ -1173,34 +1902,37 @@ model DockDoor {
 
 // Receipt processing when goods arrive
 model Receipt {
-  id              String        @id @default(uuid())
-  receiptNumber   String        @unique
-  asnId           String?
-  warehouseId     String
-  dockDoorId      String?
-  receivedBy      String
-  status          ReceiptStatus @default(IN_PROGRESS)
-  receiptMethod   ReceiptMethod @default(MANUAL)
-  totalItems      Int           @default(0)
-  receivedItems   Int           @default(0)
-  discrepancies   Int           @default(0)
-  startTime       DateTime?
-  endTime         DateTime?
-  qcRequired      Boolean       @default(false)
-  qcCompleted     Boolean       @default(false)
-  qcPassed        Boolean?
-  qcNotes         String?
-  notes           String?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id            String        @id @default(uuid())
+  receiptNumber String        @unique
+  asnId         String?
+  warehouseId   String
+  dockDoorId    String?
+  receivedBy    String
+  status        ReceiptStatus @default(IN_PROGRESS)
+  receiptMethod ReceiptMethod @default(MANUAL)
+  totalItems    Int           @default(0)
+  receivedItems Int           @default(0)
+  discrepancies Int           @default(0)
+  startTime     DateTime?
+  endTime       DateTime?
+  qcRequired    Boolean       @default(false)
+  qcCompleted   Boolean       @default(false)
+  qcPassed      Boolean?
+  qcNotes       String?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   // Relations
-  asn             ASN?          @relation(fields: [asnId], references: [id])
-  warehouse       Warehouse     @relation(fields: [warehouseId], references: [id])
-  dockDoor        DockDoor?     @relation(fields: [dockDoorId], references: [id])
-  receiver        User          @relation("ReceiptReceiver", fields: [receivedBy], references: [id])
-  receiptItems    ReceiptItem[]
-  putAwayTasks    PutAwayTask[]
+  asn          ASN?          @relation(fields: [asnId], references: [id])
+  warehouse    Warehouse     @relation(fields: [warehouseId], references: [id])
+  dockDoor     DockDoor?     @relation(fields: [dockDoorId], references: [id])
+  receiver     User          @relation("ReceiptReceiver", fields: [receivedBy], references: [id])
+  receiptItems ReceiptItem[]
+  putAwayTasks PutAwayTask[]
+  
+  // Phase 4: Advanced Cost Management Relations
+  activityCosts ActivityCost[]
 
   @@index([warehouseId, status])
   @@index([receivedBy])
@@ -1227,10 +1959,10 @@ model ReceiptItem {
   createdAt         DateTime      @default(now())
 
   // Relations
-  receipt           Receipt       @relation(fields: [receiptId], references: [id], onDelete: Cascade)
-  asnItem           ASNItem?      @relation(fields: [asnItemId], references: [id])
-  inventoryItem     InventoryItem @relation(fields: [inventoryItemId], references: [id])
-  putAwayTasks      PutAwayTask[]
+  receipt       Receipt       @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  asnItem       ASNItem?      @relation(fields: [asnItemId], references: [id])
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  putAwayTasks  PutAwayTask[]
 
   @@index([receiptId])
   @@index([inventoryItemId])
@@ -1238,35 +1970,38 @@ model ReceiptItem {
 
 // Put-away tasks to store received items
 model PutAwayTask {
-  id              String           @id @default(uuid())
-  taskNumber      String           @unique
-  receiptId       String
-  receiptItemId   String
-  warehouseId     String
-  fromLocationId  String?          // Staging location
-  toLocationId    String?          // Final storage location
-  inventoryItemId String
-  quantity        Int
-  assignedTo      String?
-  status          PutAwayStatus    @default(PENDING)
-  priority        Int              @default(1)
-  putAwayMethod   PutAwayMethod    @default(MANUAL)
-  suggestedLocation String?        // AI/system suggested location
-  equipment       String?          // Forklift, pallet jack, etc.
-  startTime       DateTime?
-  endTime         DateTime?
-  notes           String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  id                String        @id @default(uuid())
+  taskNumber        String        @unique
+  receiptId         String
+  receiptItemId     String
+  warehouseId       String
+  fromLocationId    String? // Staging location
+  toLocationId      String? // Final storage location
+  inventoryItemId   String
+  quantity          Int
+  assignedTo        String?
+  status            PutAwayStatus @default(PENDING)
+  priority          Int           @default(1)
+  putAwayMethod     PutAwayMethod @default(MANUAL)
+  suggestedLocation String? // AI/system suggested location
+  equipment         String? // Forklift, pallet jack, etc.
+  startTime         DateTime?
+  endTime           DateTime?
+  notes             String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   // Relations
-  receipt         Receipt          @relation(fields: [receiptId], references: [id])
-  receiptItem     ReceiptItem      @relation(fields: [receiptItemId], references: [id])
-  warehouse       Warehouse        @relation(fields: [warehouseId], references: [id])
-  fromLocation    Location?        @relation("PutAwayFromLocation", fields: [fromLocationId], references: [id])
-  toLocation      Location?        @relation("PutAwayToLocation", fields: [toLocationId], references: [id])
-  inventoryItem   InventoryItem    @relation(fields: [inventoryItemId], references: [id])
-  assignedUser    User?            @relation("PutAwayAssignedUser", fields: [assignedTo], references: [id])
+  receipt       Receipt       @relation(fields: [receiptId], references: [id])
+  receiptItem   ReceiptItem   @relation(fields: [receiptItemId], references: [id])
+  warehouse     Warehouse     @relation(fields: [warehouseId], references: [id])
+  fromLocation  Location?     @relation("PutAwayFromLocation", fields: [fromLocationId], references: [id])
+  toLocation    Location?     @relation("PutAwayToLocation", fields: [toLocationId], references: [id])
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  assignedUser  User?         @relation("PutAwayAssignedUser", fields: [assignedTo], references: [id])
+  
+  // Phase 4: Advanced Cost Management Relations
+  activityCosts ActivityCost[]
 
   @@index([warehouseId, status])
   @@index([assignedTo])
@@ -1275,31 +2010,31 @@ model PutAwayTask {
 
 // Cross-dock operations - direct transfer without storage
 model CrossDockTask {
-  id              String            @id @default(uuid())
-  taskNumber      String            @unique
-  asnId           String?
-  inboundShipmentId String?
+  id                 String          @id @default(uuid())
+  taskNumber         String          @unique
+  asnId              String?
+  inboundShipmentId  String?
   outboundShipmentId String
-  warehouseId     String
-  inventoryItemId String
-  quantity        Int
-  status          CrossDockStatus   @default(PENDING)
-  priority        Int               @default(1)
-  assignedTo      String?
-  stagingLocation String?
-  startTime       DateTime?
-  endTime         DateTime?
-  notes           String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  warehouseId        String
+  inventoryItemId    String
+  quantity           Int
+  status             CrossDockStatus @default(PENDING)
+  priority           Int             @default(1)
+  assignedTo         String?
+  stagingLocation    String?
+  startTime          DateTime?
+  endTime            DateTime?
+  notes              String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   // Relations
-  asn             ASN?              @relation(fields: [asnId], references: [id])
-  inboundShipment Shipment?         @relation("CrossDockInbound", fields: [inboundShipmentId], references: [id])
-  outboundShipment Shipment         @relation("CrossDockOutbound", fields: [outboundShipmentId], references: [id])
-  warehouse       Warehouse         @relation(fields: [warehouseId], references: [id])
-  inventoryItem   InventoryItem     @relation(fields: [inventoryItemId], references: [id])
-  assignedUser    User?             @relation("CrossDockAssignedUser", fields: [assignedTo], references: [id])
+  asn              ASN?          @relation(fields: [asnId], references: [id])
+  inboundShipment  Shipment?     @relation("CrossDockInbound", fields: [inboundShipmentId], references: [id])
+  outboundShipment Shipment      @relation("CrossDockOutbound", fields: [outboundShipmentId], references: [id])
+  warehouse        Warehouse     @relation(fields: [warehouseId], references: [id])
+  inventoryItem    InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  assignedUser     User?         @relation("CrossDockAssignedUser", fields: [assignedTo], references: [id])
 
   @@index([warehouseId, status])
   @@index([assignedTo])
@@ -1407,30 +2142,30 @@ enum CrossDockStatus {
 
 // Cycle Counting System Models
 model CycleCount {
-  id              String            @id @default(uuid())
-  name            String
-  description     String?
-  warehouseId     String
-  countType       CycleCountType    @default(RANDOM)
-  frequency       CycleCountFrequency @default(MONTHLY)
-  status          CycleCountStatus  @default(SCHEDULED)
-  scheduledDate   DateTime
-  startedAt       DateTime?
-  completedAt     DateTime?
-  createdById     String
-  assignedToId    String?
-  lastCountDate   DateTime?
-  nextCountDate   DateTime?
-  settings        Json?             // Configuration like item selection criteria, location filters, etc.
-  
+  id            String              @id @default(uuid())
+  name          String
+  description   String?
+  warehouseId   String
+  countType     CycleCountType      @default(RANDOM)
+  frequency     CycleCountFrequency @default(MONTHLY)
+  status        CycleCountStatus    @default(SCHEDULED)
+  scheduledDate DateTime
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdById   String
+  assignedToId  String?
+  lastCountDate DateTime?
+  nextCountDate DateTime?
+  settings      Json? // Configuration like item selection criteria, location filters, etc.
+
   // Relations
-  warehouse       Warehouse         @relation(fields: [warehouseId], references: [id])
-  createdBy       User              @relation("CycleCountCreatedBy", fields: [createdById], references: [id])
-  assignedTo      User?             @relation("CycleCountAssignedTo", fields: [assignedToId], references: [id])
-  tasks           CycleCountTask[]
-  
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  warehouse  Warehouse        @relation(fields: [warehouseId], references: [id])
+  createdBy  User             @relation("CycleCountCreatedBy", fields: [createdById], references: [id])
+  assignedTo User?            @relation("CycleCountAssignedTo", fields: [assignedToId], references: [id])
+  tasks      CycleCountTask[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([warehouseId])
   @@index([status])
@@ -1438,26 +2173,26 @@ model CycleCount {
 }
 
 model CycleCountTask {
-  id              String            @id @default(uuid())
-  cycleCountId    String
-  locationId      String?
-  zone            String?
-  status          CycleCountTaskStatus @default(PENDING)
-  assignedToId    String?
-  startedAt       DateTime?
-  completedAt     DateTime?
-  notes           String?
-  varianceFlag    Boolean           @default(false)
-  accuracyRate    Float?            // Percentage of items counted correctly
-  
+  id           String               @id @default(uuid())
+  cycleCountId String
+  locationId   String?
+  zone         String?
+  status       CycleCountTaskStatus @default(PENDING)
+  assignedToId String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  notes        String?
+  varianceFlag Boolean              @default(false)
+  accuracyRate Float? // Percentage of items counted correctly
+
   // Relations
-  cycleCount      CycleCount        @relation(fields: [cycleCountId], references: [id], onDelete: Cascade)
-  location        Location?         @relation("CycleCountTaskLocation", fields: [locationId], references: [id])
-  assignedTo      User?             @relation("CycleCountTaskAssignedTo", fields: [assignedToId], references: [id])
-  items           CycleCountItem[]
-  
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  cycleCount CycleCount       @relation(fields: [cycleCountId], references: [id], onDelete: Cascade)
+  location   Location?        @relation("CycleCountTaskLocation", fields: [locationId], references: [id])
+  assignedTo User?            @relation("CycleCountTaskAssignedTo", fields: [assignedToId], references: [id])
+  items      CycleCountItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([cycleCountId])
   @@index([status])
@@ -1465,36 +2200,91 @@ model CycleCountTask {
 }
 
 model CycleCountItem {
-  id              String            @id @default(uuid())
+  id              String               @id @default(uuid())
   taskId          String
   itemId          String
   locationId      String
   expectedQty     Int
   countedQty      Int?
-  variance        Int?              // countedQty - expectedQty
-  variancePercent Float?            // (variance / expectedQty) * 100
+  variance        Int? // countedQty - expectedQty
+  variancePercent Float? // (variance / expectedQty) * 100
   status          CycleCountItemStatus @default(PENDING)
   notes           String?
   countedById     String?
   countedAt       DateTime?
-  reason          String?           // Reason for variance
-  
+  reason          String? // Reason for variance
+
   // Relations
-  task            CycleCountTask    @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  item            InventoryItem     @relation("CycleCountInventoryItem", fields: [itemId], references: [id])
-  location        Location          @relation("CycleCountItemLocation", fields: [locationId], references: [id])
-  countedBy       User?             @relation("CycleCountItemCountedBy", fields: [countedById], references: [id])
-  
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  task      CycleCountTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  item      InventoryItem  @relation("CycleCountInventoryItem", fields: [itemId], references: [id])
+  location  Location       @relation("CycleCountItemLocation", fields: [locationId], references: [id])
+  countedBy User?          @relation("CycleCountItemCountedBy", fields: [countedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([taskId])
   @@index([status])
   @@index([variance])
 }
 
+// Shipment Loading/Unloading Task Management
+model ShipmentLoadingTask {
+  id                 String            @id @default(uuid())
+  shipmentId         String
+  warehouseId        String
+  taskType           LoadingTaskType
+  priority           TaskPriority      @default(MEDIUM)
+  status             LoadingTaskStatus @default(PENDING)
+  estimatedDuration  Int? // in minutes
+  actualDuration     Int? // in minutes
+  workersRequired    Int               @default(2)
+  workersAssigned    Int               @default(0)
+  dockDoorId         String?
+  scheduledStartTime DateTime?
+  actualStartTime    DateTime?
+  actualEndTime      DateTime?
+  notes              String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  // Relations
+  shipment          Shipment                @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  warehouse         Warehouse               @relation(fields: [warehouseId], references: [id])
+  dockDoor          DockDoor?               @relation(fields: [dockDoorId], references: [id])
+  workerAssignments LoadingTaskAssignment[]
+
+  @@index([shipmentId])
+  @@index([warehouseId])
+  @@index([status])
+  @@index([taskType])
+}
+
+model LoadingTaskAssignment {
+  id            String           @id @default(uuid())
+  loadingTaskId String
+  workerId      String
+  assignedAt    DateTime         @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+  status        AssignmentStatus @default(ASSIGNED)
+  notes         String?
+
+  // Relations
+  loadingTask ShipmentLoadingTask @relation(fields: [loadingTaskId], references: [id], onDelete: Cascade)
+  worker      User                @relation("LoadingTaskWorker", fields: [workerId], references: [id])
+
+  @@unique([loadingTaskId, workerId])
+  @@index([workerId])
+  @@index([status])
+}
+
 enum CycleCountType {
+  FULL
+  PARTIAL
   RANDOM
+  ABC
+  PERPETUAL
   ABC_ANALYSIS
   VELOCITY_BASED
   LOCATION_BASED
@@ -1508,14 +2298,17 @@ enum CycleCountFrequency {
   MONTHLY
   QUARTERLY
   ANNUALLY
+  ONE_TIME
   CUSTOM
 }
 
 enum CycleCountStatus {
+  DRAFT
   SCHEDULED
-  IN_PROGRESS
+  ACTIVE
   COMPLETED
   CANCELLED
+  IN_PROGRESS
   ON_HOLD
 }
 
@@ -1536,3 +2329,2424 @@ enum CycleCountItemStatus {
   REJECTED
   RECOUNTED
 }
+
+// New enums for loading/unloading tasks
+enum LoadingTaskType {
+  LOADING
+  UNLOADING
+}
+
+enum LoadingTaskStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  ON_HOLD
+}
+
+enum AssignmentStatus {
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+// Purchase Requisition - Internal request for purchase
+model PurchaseRequisition {
+  id              String                    @id @default(uuid())
+  requisitionNumber String                  @unique
+  requesterId     String
+  departmentId    String?
+  warehouseId     String?
+  status          PurchaseRequisitionStatus @default(PENDING)
+  priority        PurchasePriority          @default(MEDIUM)
+  
+  // Request details
+  description     String?
+  justification   String?
+  budgetCode      String?
+  totalEstimated  Decimal?
+  requestedDate   DateTime
+  requiredDate    DateTime
+  
+  // Approval workflow
+  approvalWorkflow Json? // Flexible workflow definition
+  currentApprover  String?
+  approvedBy       String?
+  approvedAt       DateTime?
+  rejectedBy       String?
+  rejectedAt       DateTime?
+  rejectionReason  String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  requester       User          @relation("PurchaseRequisitionRequester", fields: [requesterId], references: [id])
+  warehouse       Warehouse?    @relation(fields: [warehouseId], references: [id])
+  supplier        Supplier?     @relation(fields: [supplierId], references: [id])
+  supplierId      String?
+  
+  // Line items
+  lineItems       PurchaseRequisitionItem[]
+  purchaseOrders  PurchaseOrder[] // Generated from this requisition
+  
+  @@index([status, requesterId])
+  @@index([requiredDate])
+}
+
+// Purchase Requisition Line Items
+model PurchaseRequisitionItem {
+  id              String              @id @default(uuid())
+  requisitionId   String
+  itemDescription String
+  specification   String?
+  quantity        Int
+  estimatedPrice  Decimal?
+  totalEstimated  Decimal?
+  category        String?
+  
+  // Relations
+  requisition     PurchaseRequisition @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  inventoryItem   InventoryItem?      @relation(fields: [inventoryItemId], references: [id])
+  inventoryItemId String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([requisitionId])
+}
+
+// Purchase Order - Formal order to supplier
+model PurchaseOrder {
+  id              String            @id @default(uuid())
+  orderNumber     String            @unique
+  supplierId      String
+  warehouseId     String?
+  status          PurchaseOrderStatus @default(DRAFT)
+  
+  // Order details
+  orderDate       DateTime
+  expectedDate    DateTime?
+  deliveredDate   DateTime?
+  
+  // Financial details
+  subtotal        Decimal           @default(0)
+  taxAmount       Decimal           @default(0)
+  shippingCost    Decimal           @default(0)
+  discountAmount  Decimal           @default(0)
+  totalAmount     Decimal           @default(0)
+  
+  // Terms and conditions
+  paymentTerms    String?
+  deliveryTerms   String?
+  notes           String?
+  
+  // Workflow
+  createdBy       String
+  approvedBy      String?
+  approvedAt      DateTime?
+  
+  // Receiving tracking
+  receivedItems   Int               @default(0)
+  totalItems      Int               @default(0)
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  // Relations
+  supplier        Supplier          @relation(fields: [supplierId], references: [id])
+  warehouse       Warehouse?        @relation(fields: [warehouseId], references: [id])
+  creator         User              @relation("PurchaseOrderCreator", fields: [createdBy], references: [id])
+  approver        User?             @relation("PurchaseOrderApprover", fields: [approvedBy], references: [id])
+  
+  // Line items and related records
+  lineItems       PurchaseOrderItem[]
+  receipts        PurchaseOrderReceipt[]
+  invoices        SupplierInvoice[]
+  priceQuotes     PriceQuote[]
+  
+  // Source requisition
+  requisition     PurchaseRequisition? @relation(fields: [requisitionId], references: [id])
+  requisitionId   String?
+  
+  // Asset Relations
+  assets          Asset[]
+  
+  @@index([status, supplierId])
+  @@index([orderDate])
+  @@index([expectedDate])
+}
+
+// Purchase Order Line Items
+model PurchaseOrderItem {
+  id              String          @id @default(uuid())
+  purchaseOrderId String
+  itemDescription String
+  quantity        Int
+  unitPrice       Decimal
+  totalPrice      Decimal
+  
+  // Receiving tracking
+  quantityReceived Int            @default(0)
+  quantityInvoiced Int            @default(0)
+  
+  // Relations
+  purchaseOrder   PurchaseOrder   @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  inventoryItem   InventoryItem?  @relation(fields: [inventoryItemId], references: [id])
+  inventoryItemId String?
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([purchaseOrderId])
+}
+
+// Purchase Order Receipts
+model PurchaseOrderReceipt {
+  id              String          @id @default(uuid())
+  purchaseOrderId String
+  receiptNumber   String          @unique
+  receivedDate    DateTime
+  receivedBy      String
+  
+  // Quality control
+  qcStatus        QCStatus        @default(PENDING)
+  qcNotes         String?
+  
+  // Relations
+  purchaseOrder   PurchaseOrder   @relation(fields: [purchaseOrderId], references: [id])
+  receiver        User            @relation("PurchaseOrderReceiver", fields: [receivedBy], references: [id])
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([purchaseOrderId])
+}
+
+// Supplier Invoices
+model SupplierInvoice {
+  id              String            @id @default(uuid())
+  invoiceNumber   String            @unique
+  supplierId      String
+  purchaseOrderId String?
+  
+  // Invoice details
+  invoiceDate     DateTime
+  dueDate         DateTime
+  amount          Decimal
+  taxAmount       Decimal           @default(0)
+  totalAmount     Decimal
+  
+  status          SupplierInvoiceStatus @default(PENDING)
+  paidDate        DateTime?
+  paidAmount      Decimal?
+  
+  // Relations
+  supplier        Supplier          @relation(fields: [supplierId], references: [id])
+  purchaseOrder   PurchaseOrder?    @relation(fields: [purchaseOrderId], references: [id])
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@index([supplierId, status])
+  @@index([dueDate])
+}
+
+// Vendor Scorecard
+model VendorScorecard {
+  id              String          @id @default(uuid())
+  supplierId      String
+  evaluationDate  DateTime
+  evaluatedBy     String
+  
+  // Score categories (0-100)
+  qualityScore    Float           @default(0)
+  deliveryScore   Float           @default(0)
+  serviceScore    Float           @default(0)
+  costScore       Float           @default(0)
+  overallScore    Float           @default(0)
+  
+  // Comments and notes
+  qualityNotes    String?
+  deliveryNotes   String?
+  serviceNotes    String?
+  costNotes       String?
+  generalNotes    String?
+  
+  // Relations
+  supplier        Supplier        @relation(fields: [supplierId], references: [id])
+  evaluator       User            @relation("VendorScorecardEvaluator", fields: [evaluatedBy], references: [id])
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([supplierId, evaluationDate])
+}
+
+// Purchase Contracts
+model PurchaseContract {
+  id              String          @id @default(uuid())
+  contractNumber  String          @unique
+  supplierId      String
+  
+  // Contract details
+  contractType    ContractType    @default(BLANKET)
+  startDate       DateTime
+  endDate         DateTime
+  autoRenew       Boolean         @default(false)
+  status          ContractStatus  @default(ACTIVE)
+  
+  // Terms
+  paymentTerms    String?
+  deliveryTerms   String?
+  qualityTerms    String?
+  penaltyTerms    String?
+  
+  // Financial
+  totalValue      Decimal?
+  minimumOrder    Decimal?
+  maximumOrder    Decimal?
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  // Relations
+  supplier        Supplier        @relation(fields: [supplierId], references: [id])
+  
+  @@index([supplierId, status])
+  @@index([endDate])
+}
+
+// Supplier Certifications
+model SupplierCertification {
+  id              String          @id @default(uuid())
+  supplierId      String
+  certificationType String
+  certificationBody String
+  issueDate       DateTime
+  expiryDate      DateTime?
+  status          CertificationStatus @default(VALID)
+  
+  // Document tracking
+  documentUrl     String?
+  verifiedBy      String?
+  verifiedDate    DateTime?
+  
+  // Relations
+  supplier        Supplier        @relation(fields: [supplierId], references: [id])
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([supplierId, expiryDate])
+}
+
+// Supplier Performance Metrics
+model SupplierPerformanceMetric {
+  id              String          @id @default(uuid())
+  supplierId      String
+  metricType      PerformanceMetricType
+  metricValue     Float
+  measurementDate DateTime
+  period          String          // "2024-Q1", "2024-01", etc.
+  
+  // Context
+  targetValue     Float?
+  threshold       Float?
+  notes           String?
+  
+  // Relations
+  supplier        Supplier        @relation(fields: [supplierId], references: [id])
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([supplierId, metricType, measurementDate])
+}
+
+// Price Quotes
+model PriceQuote {
+  id              String          @id @default(uuid())
+  quoteNumber     String          @unique
+  supplierId      String
+  requestedBy     String
+  
+  // Quote details
+  quoteDate       DateTime
+  validUntil      DateTime
+  status          QuoteStatus     @default(PENDING)
+  
+  // Pricing
+  subtotal        Decimal
+  taxAmount       Decimal         @default(0)
+  shippingCost    Decimal         @default(0)
+  totalAmount     Decimal
+  
+  // Terms
+  paymentTerms    String?
+  deliveryTerms   String?
+  notes           String?
+  
+  // Relations
+  supplier        Supplier        @relation(fields: [supplierId], references: [id])
+  requester       User            @relation("PriceQuoteRequester", fields: [requestedBy], references: [id])
+  
+  // Conversion to PO
+  purchaseOrder   PurchaseOrder?  @relation(fields: [purchaseOrderId], references: [id])
+  purchaseOrderId String?
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([supplierId, status])
+  @@index([validUntil])
+}
+
+// Procurement Analytics Models
+model ProcurementSpend {
+  id              String          @id @default(uuid())
+  supplierId      String
+  category        String
+  subcategory     String?
+  
+  // Time period
+  year            Int
+  month           Int
+  quarter         Int
+  
+  // Spend metrics
+  totalSpend      Decimal
+  orderCount      Int
+  averageOrderValue Decimal
+  
+  // Performance
+  onTimeDelivery  Float?
+  qualityIssues   Int             @default(0)
+  costSavings     Decimal         @default(0)
+  
+  // Relations
+  supplier        Supplier        @relation(fields: [supplierId], references: [id])
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([supplierId, year, month])
+  @@index([category, year, month])
+}
+
+// === NEW ENUMS FOR PROCUREMENT ===
+
+enum SupplierType {
+  VENDOR
+  MANUFACTURER
+  DISTRIBUTOR
+  SERVICE_PROVIDER
+  CONTRACTOR
+}
+
+enum SupplierStatus {
+  ACTIVE
+  INACTIVE
+  PENDING_APPROVAL
+  SUSPENDED
+  BLACKLISTED
+}
+
+enum PurchaseRequisitionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  CONVERTED_TO_PO
+}
+
+enum PurchasePriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  SENT
+  ACKNOWLEDGED
+  PARTIALLY_RECEIVED
+  FULLY_RECEIVED
+  CANCELLED
+  CLOSED
+}
+
+enum SupplierInvoiceStatus {
+  PENDING
+  APPROVED
+  PAID
+  DISPUTED
+  CANCELLED
+}
+
+enum ContractType {
+  BLANKET
+  MASTER_AGREEMENT
+  SPOT_PURCHASE
+  FRAMEWORK
+  SERVICE_AGREEMENT
+}
+
+enum ContractStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+  SUSPENDED
+}
+
+enum CertificationStatus {
+  VALID
+  EXPIRED
+  SUSPENDED
+  REVOKED
+}
+
+enum PerformanceMetricType {
+  ON_TIME_DELIVERY
+  QUALITY_RATING
+  COST_SAVINGS
+  LEAD_TIME
+  DEFECT_RATE
+  RESPONSE_TIME
+  COMPLIANCE_SCORE
+}
+
+enum QuoteStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CONVERTED_TO_PO
+}
+
+// === PHASE 3: ASSET & MAINTENANCE MANAGEMENT ===
+
+// Asset Management
+model Asset {
+  id               String          @id @default(uuid())
+  assetNumber      String          @unique
+  name             String
+  description      String?
+  category         AssetCategory
+  subCategory      String?
+  
+  // Location & Assignment
+  warehouseId      String?
+  locationId       String?
+  assignedTo       String?         // User ID who is responsible
+  
+  // Purchase Information
+  supplierId       String?
+  purchaseDate     DateTime
+  purchaseCost     Decimal
+  purchaseOrderId  String?
+  
+  // Current Status
+  status           AssetStatus     @default(ACTIVE)
+  condition        AssetCondition  @default(EXCELLENT)
+  currentValue     Decimal?
+  
+  // Depreciation
+  depreciationMethod AssetDepreciationMethod @default(STRAIGHT_LINE)
+  depreciationRate Float?
+  usefulLifeYears  Int?
+  salvageValue     Decimal         @default(0)
+  
+  // Technical Details
+  serialNumber     String?
+  modelNumber      String?
+  manufacturer     String?
+  specifications   Json?           // Flexible tech specs
+  
+  // Warranty
+  warrantyStart    DateTime?
+  warrantyEnd      DateTime?
+  warrantyProvider String?
+  
+  // Compliance & Certifications
+  certifications   String[]        // Array of certifications
+  complianceNotes  String?
+  lastInspectionDate DateTime?
+  nextInspectionDate DateTime?
+  
+  // Relations
+  warehouse        Warehouse?      @relation(fields: [warehouseId], references: [id])
+  location         Location?       @relation(fields: [locationId], references: [id])
+  assignedUser     User?           @relation("AssetAssignedTo", fields: [assignedTo], references: [id])
+  supplier         Supplier?       @relation(fields: [supplierId], references: [id])
+  purchaseOrder    PurchaseOrder?  @relation(fields: [purchaseOrderId], references: [id])
+  
+  // Maintenance Relations
+  maintenanceSchedules MaintenanceSchedule[]
+  workOrders          WorkOrder[]
+  maintenanceHistory  MaintenanceLog[]
+  assetReadings       AssetReading[]
+  
+  // Financial Relations
+  depreciationRecords DepreciationRecord[]
+  
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  
+  @@index([warehouseId, category])
+  @@index([status, condition])
+  @@index([nextInspectionDate])
+}
+
+// Maintenance Scheduling
+model MaintenanceSchedule {
+  id               String          @id @default(uuid())
+  assetId          String
+  name             String
+  description      String?
+  maintenanceType  MaintenanceType
+  
+  // Scheduling
+  frequency        MaintenanceFrequency
+  intervalDays     Int?            // For custom frequencies
+  intervalHours    Int?            // For hour-based maintenance
+  intervalMiles    Int?            // For vehicle maintenance
+  
+  // Last & Next Maintenance
+  lastMaintenanceDate DateTime?
+  nextMaintenanceDate DateTime
+  
+  // Scheduling Rules
+  isActive         Boolean         @default(true)
+  priority         MaintenancePriority @default(MEDIUM)
+  estimatedDuration Int?           // Minutes
+  estimatedCost    Decimal?
+  
+  // Instructions
+  instructions     String?
+  requiredSkills   String[]
+  requiredTools    String[]
+  safetyNotes      String?
+  
+  // Relations
+  asset            Asset           @relation(fields: [assetId], references: [id])
+  workOrders       WorkOrder[]
+  
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  
+  @@index([assetId, nextMaintenanceDate])
+  @@index([nextMaintenanceDate, isActive])
+}
+
+// Work Orders for Maintenance
+model WorkOrder {
+  id               String          @id @default(uuid())
+  workOrderNumber  String          @unique
+  assetId          String
+  scheduleId       String?         // If generated from schedule
+  
+  // Work Order Details
+  title            String
+  description      String?
+  workType         WorkOrderType
+  priority         MaintenancePriority @default(MEDIUM)
+  status           WorkOrderStatus @default(PENDING)
+  
+  // Assignment
+  assignedTo       String?
+  assignedTeam     String?
+  reportedBy       String?
+  
+  // Scheduling
+  scheduledDate    DateTime?
+  dueDate          DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  
+  // Cost Tracking
+  estimatedCost    Decimal?
+  actualCost       Decimal?
+  laborHours       Float?
+  
+  // Downtime Impact
+  expectedDowntime Int?            // Minutes
+  actualDowntime   Int?            // Minutes
+  
+  // Completion Details
+  completionNotes  String?
+  failureAnalysis  String?
+  recommendedActions String?
+  
+  // Parts & Materials
+  partsUsed        WorkOrderPart[]
+  
+  // Relations
+  asset            Asset           @relation(fields: [assetId], references: [id])
+  schedule         MaintenanceSchedule? @relation(fields: [scheduleId], references: [id])
+  assignedUser     User?           @relation("WorkOrderAssignedTo", fields: [assignedTo], references: [id])
+  reporter         User?           @relation("WorkOrderReporter", fields: [reportedBy], references: [id])
+  maintenanceLog   MaintenanceLog?
+  
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  
+  @@index([assetId, status])
+  @@index([assignedTo, status])
+  @@index([dueDate, status])
+}
+
+// Parts used in work orders
+model WorkOrderPart {
+  id               String          @id @default(uuid())
+  workOrderId      String
+  partNumber       String
+  partName         String
+  quantityUsed     Int
+  unitCost         Decimal
+  totalCost        Decimal
+  
+  // Relations
+  workOrder        WorkOrder       @relation(fields: [workOrderId], references: [id])
+  
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  
+  @@index([workOrderId])
+}
+
+// Maintenance History Log
+model MaintenanceLog {
+  id               String          @id @default(uuid())
+  assetId          String
+  workOrderId      String?         @unique
+  
+  // Log Details
+  maintenanceDate  DateTime
+  maintenanceType  MaintenanceType
+  description      String
+  
+  // Performance
+  performedBy      String?
+  durationMinutes  Int?
+  downtime         Int?            // Minutes of downtime
+  
+  // Cost
+  totalCost        Decimal?
+  laborCost        Decimal?
+  partsCost        Decimal?
+  
+  // Outcomes
+  condition        AssetCondition?
+  nextServiceDate  DateTime?
+  notes            String?
+  
+  // Relations
+  asset            Asset           @relation(fields: [assetId], references: [id])
+  workOrder        WorkOrder?      @relation(fields: [workOrderId], references: [id])
+  performedByUser  User?           @relation("MaintenancePerformedBy", fields: [performedBy], references: [id])
+  
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  
+  @@index([assetId, maintenanceDate])
+  @@index([maintenanceDate])
+}
+
+// Asset Performance Readings
+model AssetReading {
+  id               String          @id @default(uuid())
+  assetId          String
+  readingType      AssetReadingType
+  readingValue     Float
+  unit             String
+  readingDate      DateTime
+  
+  // Context
+  readingBy        String?
+  notes            String?
+  alertThreshold   Float?
+  isAlert          Boolean         @default(false)
+  
+  // Relations
+  asset            Asset           @relation(fields: [assetId], references: [id])
+  reader           User?           @relation("AssetReadingRecorder", fields: [readingBy], references: [id])
+  
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  
+  @@index([assetId, readingType, readingDate])
+  @@index([isAlert, readingDate])
+}
+
+// Asset Depreciation Records
+model DepreciationRecord {
+  id               String          @id @default(uuid())
+  assetId          String
+  
+  // Period
+  year             Int
+  month            Int
+  periodStart      DateTime
+  periodEnd        DateTime
+  
+  // Depreciation Details
+  depreciationAmount Decimal
+  accumulatedDepreciation Decimal
+  bookValue        Decimal
+  
+  // Method Used
+  method           AssetDepreciationMethod
+  rate             Float?
+  
+  // Relations
+  asset            Asset           @relation(fields: [assetId], references: [id])
+  
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  
+  @@index([assetId, year, month])
+  @@unique([assetId, year, month])
+}
+
+// Facility Management
+model Facility {
+  id               String          @id @default(uuid())
+  name             String
+  facilityType     FacilityType
+  
+  // Location
+  address          String
+  city             String
+  state            String
+  zipCode          String
+  country          String          @default("US")
+  
+  // Size & Capacity
+  totalSquareFeet  Float?
+  warehouseSquareFeet Float?
+  officeSquareFeet Float?
+  totalCapacity    Float?          // Cubic feet or pallets
+  
+  // Utilities
+  electricityMeterNumber String?
+  gasMeterNumber   String?
+  waterMeterNumber String?
+  
+  // Management
+  facilityManager  String?
+  maintenanceContact String?
+  
+  // Relations
+  warehouses       Warehouse[]
+  utilityBills     UtilityBill[]
+  facilityAreas    FacilityArea[]
+  allocationRules  UtilityCostAllocationRule[]
+  utilityBudgets   UtilityBudget[]
+  costVariances    UtilityCostVariance[]
+  
+  // Facility Maintenance & Compliance Relations
+  maintenanceLogs  FacilityMaintenanceLog[]
+  compliance       FacilityCompliance[]
+  complianceAudits ComplianceAudit[]
+  safetyIncidents  SafetyIncident[]
+  environmentalMonitoring EnvironmentalMonitoring[]
+  insuranceClaims  InsuranceClaim[] @relation("FacilityInsuranceClaims")
+  
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  
+  @@index([facilityType])
+}
+
+// Facility Areas for space management
+model FacilityArea {
+  id               String          @id @default(uuid())
+  facilityId       String
+  name             String
+  areaType         FacilityAreaType
+  
+  // Space Details
+  squareFeet       Float
+  height           Float?
+  capacity         Float?
+  
+  // Utilization
+  currentUtilization Float?        // Percentage
+  maxUtilization   Float?         // Percentage threshold
+  
+  // Relations
+  facility         Facility        @relation(fields: [facilityId], references: [id])
+  
+  // Facility Maintenance & Compliance Relations
+  maintenanceLogs  FacilityMaintenanceLog[]
+  safetyIncidents  SafetyIncident[]
+  environmentalMonitoring EnvironmentalMonitoring[]
+  
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  
+  @@index([facilityId, areaType])
+}
+
+// Utility Bills and Cost Tracking
+model UtilityBill {
+  id               String          @id @default(uuid())
+  facilityId       String
+  utilityType      UtilityType
+  
+  // Billing Period
+  billDate         DateTime
+  serviceStart     DateTime
+  serviceEnd       DateTime
+  
+  // Usage
+  previousReading  Float?
+  currentReading   Float
+  usage            Float
+  unit             String          // kWh, therms, gallons, etc.
+  
+  // Cost
+  amount           Decimal
+  ratePerUnit      Decimal?
+  
+  // Allocation - Enhanced
+  warehouseAllocation Float?       // Percentage allocated to warehouse
+  officeAllocation Float?          // Percentage allocated to office
+  allocatedAmount  Decimal?        // Total allocated amount
+  unallocatedAmount Decimal?       // Remaining unallocated amount
+  allocationMethod String?         // 'SQUARE_FOOTAGE', 'USAGE_BASED', 'FIXED_PERCENTAGE', 'CUSTOM'
+  isAllocated      Boolean         @default(false)
+  
+  // Relations
+  facility         Facility        @relation(fields: [facilityId], references: [id])
+  allocations      UtilityCostAllocation[]
+  
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  
+  @@index([facilityId, utilityType, billDate])
+}
+
+// Enhanced Utility Cost Allocation
+model UtilityCostAllocation {
+  id              String      @id @default(uuid())
+  utilityBillId   String
+  costCenterId    String?     // Optional - for ERP integration
+  warehouseId     String?     // Optional - for warehouse-specific allocation
+  
+  // Allocation Details
+  allocationType  String      // 'WAREHOUSE', 'OFFICE', 'COMMON_AREA', 'DOCK', 'STORAGE'
+  allocationKey   String      // Description of what this allocation is for
+  percentage      Float       // Percentage of total bill
+  amount          Decimal     // Dollar amount allocated
+  
+  // Allocation Method
+  allocationMethod String     // How this was calculated
+  
+  // Square footage basis (if applicable)
+  squareFeet      Float?
+  totalSquareFeet Float?
+  
+  // Usage basis (if applicable)
+  usageMetric     Float?
+  totalUsageMetric Float?
+  
+  // Relations
+  utilityBill     UtilityBill @relation(fields: [utilityBillId], references: [id])
+  costCenter      CostCenter? @relation(fields: [costCenterId], references: [id])
+  warehouse       Warehouse?  @relation(fields: [warehouseId], references: [id])
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@index([utilityBillId])
+  @@index([costCenterId])
+  @@index([warehouseId])
+}
+
+// Utility Cost Allocation Rules
+model UtilityCostAllocationRule {
+  id              String      @id @default(uuid())
+  facilityId      String
+  utilityType     UtilityType
+  
+  // Rule Configuration
+  ruleName        String
+  isActive        Boolean     @default(true)
+  priority        Int         @default(1) // Higher number = higher priority
+  
+  // Allocation Configuration
+  allocationType  String      // 'WAREHOUSE', 'OFFICE', 'COMMON_AREA', etc.
+  allocationMethod String     // 'SQUARE_FOOTAGE', 'FIXED_PERCENTAGE', 'USAGE_BASED'
+  
+  // Method-specific parameters
+  fixedPercentage Float?      // For FIXED_PERCENTAGE method
+  squareFootageBase String?   // For SQUARE_FOOTAGE method
+  usageMetricType String?     // For USAGE_BASED method
+  
+  // Target allocation
+  warehouseId     String?     // Optional - specific warehouse
+  costCenterId    String?     // Optional - specific cost center
+  
+  // Relations
+  facility        Facility    @relation(fields: [facilityId], references: [id])
+  warehouse       Warehouse?  @relation(fields: [warehouseId], references: [id])
+  costCenter      CostCenter? @relation(fields: [costCenterId], references: [id])
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@index([facilityId, utilityType])
+  @@index([isActive])
+}
+
+// Utility Budget and Forecasting
+model UtilityBudget {
+  id              String      @id @default(uuid())
+  facilityId      String
+  utilityType     UtilityType
+  
+  // Budget Period
+  budgetYear      Int
+  budgetMonth     Int?        // Optional - for monthly budgets
+  
+  // Budget Amounts
+  budgetedAmount  Decimal
+  budgetedUsage   Float?
+  
+  // Allocation Budget
+  warehouseBudget Decimal?
+  officeBudget    Decimal?
+  
+  // Status
+  isActive        Boolean     @default(true)
+  
+  // Relations
+  facility        Facility    @relation(fields: [facilityId], references: [id])
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@unique([facilityId, utilityType, budgetYear, budgetMonth])
+  @@index([facilityId, utilityType])
+}
+
+// Utility Cost Variance Analysis
+model UtilityCostVariance {
+  id              String      @id @default(uuid())
+  facilityId      String
+  utilityType     UtilityType
+  
+  // Period
+  analysisDate    DateTime
+  periodStart     DateTime
+  periodEnd       DateTime
+  
+  // Actual vs Budget
+  actualAmount    Decimal
+  budgetedAmount  Decimal
+  variance        Decimal     // Actual - Budget
+  variancePercent Float       // (Variance / Budget) * 100
+  
+  // Usage Variance
+  actualUsage     Float?
+  budgetedUsage   Float?
+  usageVariance   Float?
+  
+  // Analysis
+  varianceReason  String?     // Reason for significant variance
+  correctionAction String?    // Planned corrective action
+  
+  // Relations
+  facility        Facility    @relation(fields: [facilityId], references: [id])
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@index([facilityId, utilityType, analysisDate])
+}
+
+// === ENUMS FOR ASSET & MAINTENANCE MANAGEMENT ===
+
+enum AssetCategory {
+  WAREHOUSE_EQUIPMENT
+  MATERIAL_HANDLING
+  TRANSPORTATION
+  FACILITY_INFRASTRUCTURE
+  IT_EQUIPMENT
+  SAFETY_EQUIPMENT
+  OFFICE_EQUIPMENT
+  OTHER
+}
+
+enum AssetStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+  RETIRED
+  DISPOSED
+  LOST
+  STOLEN
+}
+
+enum AssetCondition {
+  EXCELLENT
+  GOOD
+  FAIR
+  POOR
+  CRITICAL
+}
+
+enum AssetDepreciationMethod {
+  STRAIGHT_LINE
+  DECLINING_BALANCE
+  UNITS_OF_PRODUCTION
+  SUM_OF_YEARS_DIGITS
+}
+
+enum MaintenanceType {
+  PREVENTIVE
+  CORRECTIVE
+  PREDICTIVE
+  EMERGENCY
+  INSPECTION
+  CALIBRATION
+  CLEANING
+}
+
+enum MaintenanceFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  SEMI_ANNUALLY
+  ANNUALLY
+  USAGE_BASED
+  CONDITION_BASED
+  CUSTOM
+}
+
+enum MaintenancePriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+  EMERGENCY
+}
+
+enum WorkOrderType {
+  PREVENTIVE_MAINTENANCE
+  CORRECTIVE_MAINTENANCE
+  EMERGENCY_REPAIR
+  INSPECTION
+  INSTALLATION
+  MODIFICATION
+  CALIBRATION
+  CLEANING
+}
+
+enum WorkOrderStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+  REJECTED
+}
+
+enum AssetReadingType {
+  TEMPERATURE
+  VIBRATION
+  PRESSURE
+  VOLTAGE
+  CURRENT
+  RUNTIME_HOURS
+  CYCLE_COUNT
+  FUEL_LEVEL
+  BATTERY_LEVEL
+  ERROR_COUNT
+  PERFORMANCE_METRIC
+}
+
+enum FacilityType {
+  WAREHOUSE
+  DISTRIBUTION_CENTER
+  MANUFACTURING
+  OFFICE
+  MIXED_USE
+  STORAGE_YARD
+}
+
+enum FacilityAreaType {
+  WAREHOUSE_FLOOR
+  RECEIVING_DOCK
+  SHIPPING_DOCK
+  OFFICE_SPACE
+  BREAK_ROOM
+  CONFERENCE_ROOM
+  PARKING_LOT
+  STORAGE_YARD
+  LOADING_AREA
+  QUALITY_CONTROL
+  MAINTENANCE_SHOP
+}
+
+enum UtilityType {
+  ELECTRICITY
+  NATURAL_GAS
+  WATER
+  SEWER
+  INTERNET
+  PHONE
+  SECURITY
+  WASTE_MANAGEMENT
+}
+
+// === FACILITY MAINTENANCE MODELS ===
+
+// Facility Maintenance Logs
+model FacilityMaintenanceLog {
+  id                String                @id @default(uuid())
+  facilityId        String
+  maintenanceType   FacilityMaintenanceType
+  areaId            String?               // Optional - specific area
+  
+  // Maintenance Details
+  title             String
+  description       String
+  priority          MaintenancePriority   @default(MEDIUM)
+  status            FacilityMaintenanceStatus @default(SCHEDULED)
+  
+  // Scheduling
+  scheduledDate     DateTime
+  completedDate     DateTime?
+  
+  // Personnel
+  assignedTo        String                // User ID
+  performedBy       String?               // User ID
+  
+  // Cost Tracking
+  estimatedCost     Decimal?
+  actualCost        Decimal?
+  laborHours        Float?
+  
+  // Compliance
+  isComplianceRequired Boolean           @default(false)
+  complianceNotes   String?
+  
+  // Documentation
+  documentsUrls     String[]             @default([])
+  beforePhotos      String[]             @default([])
+  afterPhotos       String[]             @default([])
+  
+  // Relations
+  facility          Facility             @relation(fields: [facilityId], references: [id])
+  area              FacilityArea?        @relation(fields: [areaId], references: [id])
+  assignedUser      User                 @relation("FacilityMaintenanceAssigned", fields: [assignedTo], references: [id])
+  performedByUser   User?                @relation("FacilityMaintenancePerformed", fields: [performedBy], references: [id])
+  
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  
+  @@index([facilityId, status])
+  @@index([scheduledDate])
+  @@index([assignedTo])
+}
+
+// Facility Compliance Tracking
+model FacilityCompliance {
+  id                String                @id @default(uuid())
+  facilityId        String
+  complianceType    ComplianceType
+  
+  // Compliance Details
+  name              String
+  description       String?
+  regulatoryBody    String?               // OSHA, EPA, etc.
+  
+  // Requirements
+  requirements      String                // JSON or text description
+  isRequired        Boolean               @default(true)
+  frequency         ComplianceFrequency
+  
+  // Scheduling
+  lastCheckDate     DateTime?
+  nextCheckDate     DateTime
+  
+  // Status
+  status            ComplianceStatus      @default(PENDING)
+  complianceLevel   ComplianceLevel       @default(PARTIAL)
+  
+  // Personnel
+  responsiblePerson String                // User ID
+  
+  // Documentation
+  documentsUrls     String[]              @default([])
+  certificateUrls   String[]              @default([])
+  
+  // Relations
+  facility          Facility              @relation(fields: [facilityId], references: [id])
+  responsible       User                  @relation("FacilityComplianceResponsible", fields: [responsiblePerson], references: [id])
+  audits            ComplianceAudit[]
+  
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  
+  @@index([facilityId, complianceType])
+  @@index([nextCheckDate])
+  @@index([status])
+}
+
+// Compliance Audit Logs
+model ComplianceAudit {
+  id                String                @id @default(uuid())
+  facilityId        String
+  complianceId      String
+  
+  // Audit Details
+  auditDate         DateTime
+  auditType         AuditType             @default(INTERNAL)
+  auditor           String                // User ID or external auditor name
+  
+  // Results
+  overallScore      Float?                // 0-100 scale
+  passed            Boolean               @default(false)
+  findings          String                // JSON with detailed findings
+  
+  // Issues
+  criticalIssues    Int                   @default(0)
+  majorIssues       Int                   @default(0)
+  minorIssues       Int                   @default(0)
+  
+  // Follow-up
+  correctiveActions String?               // Required actions
+  followUpDate      DateTime?
+  followUpBy        String?               // User ID
+  
+  // Documentation
+  reportUrl         String?
+  photosUrls        String[]              @default([])
+  
+  // Relations
+  facility          Facility              @relation(fields: [facilityId], references: [id])
+  compliance        FacilityCompliance    @relation(fields: [complianceId], references: [id])
+  auditorUser       User?                 @relation("ComplianceAuditor", fields: [auditor], references: [id])
+  followUpUser      User?                 @relation("ComplianceFollowUp", fields: [followUpBy], references: [id])
+  
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  
+  @@index([facilityId, auditDate])
+  @@index([complianceId])
+  @@index([followUpDate])
+}
+
+// Safety Incident Tracking
+model SafetyIncident {
+  id                String                @id @default(uuid())
+  facilityId        String
+  areaId            String?               // Optional - specific area
+  
+  // Incident Details
+  incidentType      SafetyIncidentType
+  severity          IncidentSeverity      @default(LOW)
+  title             String
+  description       String
+  
+  // When & Where
+  incidentDate      DateTime
+  incidentTime      String                // Time of day
+  location          String                // Specific location description
+  
+  // Personnel
+  reportedBy        String                // User ID
+  involvedPersons   String[]              @default([]) // Array of person names/IDs
+  witnesses         String[]              @default([]) // Array of witness names
+  
+  // Injury Details
+  injuryType        String?
+  bodyPartAffected  String?
+  medicalAttention  Boolean               @default(false)
+  lostTime          Boolean               @default(false)
+  
+  // Investigation
+  rootCause         String?
+  contributingFactors String?
+  correctiveActions String?
+  preventiveActions String?
+  
+  // Status
+  status            IncidentStatus        @default(REPORTED)
+  investigatedBy    String?               // User ID
+  investigatedDate  DateTime?
+  
+  // Documentation
+  photosUrls        String[]              @default([])
+  documentsUrls     String[]              @default([])
+  
+  // Relations
+  facility          Facility              @relation(fields: [facilityId], references: [id])
+  area              FacilityArea?         @relation(fields: [areaId], references: [id])
+  reporter          User                  @relation("SafetyIncidentReporter", fields: [reportedBy], references: [id])
+  investigator      User?                 @relation("SafetyIncidentInvestigator", fields: [investigatedBy], references: [id])
+  
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  
+  @@index([facilityId, incidentType])
+  @@index([incidentDate])
+  @@index([severity])
+  @@index([status])
+}
+
+// Environmental Monitoring
+model EnvironmentalMonitoring {
+  id                String                @id @default(uuid())
+  facilityId        String
+  areaId            String?               // Optional - specific area
+  
+  // Monitoring Details
+  monitoringType    EnvironmentalType
+  parameter         String                // Temperature, humidity, air quality, etc.
+  
+  // Readings
+  value             Float
+  unit              String
+  readingDate       DateTime
+  
+  // Thresholds
+  minThreshold      Float?
+  maxThreshold      Float?
+  isWithinLimits    Boolean               @default(true)
+  
+  // Alert
+  alertLevel        AlertLevel            @default(NORMAL)
+  alertMessage      String?
+  
+  // Personnel
+  recordedBy        String                // User ID
+  
+  // Relations
+  facility          Facility              @relation(fields: [facilityId], references: [id])
+  area              FacilityArea?         @relation(fields: [areaId], references: [id])
+  recorder          User                  @relation("EnvironmentalMonitoringRecorder", fields: [recordedBy], references: [id])
+  
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  
+  @@index([facilityId, monitoringType])
+  @@index([readingDate])
+  @@index([alertLevel])
+}
+
+// === ENUMS FOR ASSET & MAINTENANCE MANAGEMENT ===
+
+// ... existing enums ...
+
+// === NEW ENUMS FOR FACILITY MAINTENANCE & COMPLIANCE ===
+
+enum FacilityMaintenanceType {
+  HVAC_MAINTENANCE
+  ELECTRICAL_MAINTENANCE
+  PLUMBING_MAINTENANCE
+  STRUCTURAL_MAINTENANCE
+  EQUIPMENT_MAINTENANCE
+  GROUNDS_MAINTENANCE
+  SECURITY_SYSTEM_MAINTENANCE
+  FIRE_SYSTEM_MAINTENANCE
+  PEST_CONTROL
+  CLEANING
+  INSPECTION
+  REPAIR
+  UPGRADE
+  INSTALLATION
+}
+
+enum FacilityMaintenanceStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  OVERDUE
+  ON_HOLD
+}
+
+enum ComplianceType {
+  SAFETY_COMPLIANCE
+  ENVIRONMENTAL_COMPLIANCE
+  FIRE_SAFETY
+  BUILDING_CODE
+  HEALTH_DEPARTMENT
+  OSHA_COMPLIANCE
+  EPA_COMPLIANCE
+  DOT_COMPLIANCE
+  HAZMAT_COMPLIANCE
+  ACCESSIBILITY_COMPLIANCE
+  INSURANCE_COMPLIANCE
+  SECURITY_COMPLIANCE
+}
+
+enum ComplianceFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  SEMI_ANNUALLY
+  ANNUALLY
+  BIANNUALLY
+  AS_NEEDED
+}
+
+enum ComplianceStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLIANT
+  NON_COMPLIANT
+  EXPIRED
+  WAIVED
+}
+
+enum ComplianceLevel {
+  FULL
+  PARTIAL
+  NON_COMPLIANT
+  UNKNOWN
+}
+
+enum AuditType {
+  INTERNAL
+  EXTERNAL
+  REGULATORY
+  INSURANCE
+  CUSTOMER
+  THIRD_PARTY
+}
+
+enum SafetyIncidentType {
+  SLIP_FALL
+  STRUCK_BY_OBJECT
+  CAUGHT_IN_MACHINERY
+  CHEMICAL_EXPOSURE
+  ELECTRICAL_SHOCK
+  FIRE_EXPLOSION
+  VEHICLE_ACCIDENT
+  LIFTING_INJURY
+  CUT_LACERATION
+  BURN
+  RESPIRATORY_ISSUE
+  NEAR_MISS
+  PROPERTY_DAMAGE
+  ENVIRONMENTAL_SPILL
+  OTHER
+}
+
+enum IncidentSeverity {
+  LOW
+  MODERATE
+  HIGH
+  CRITICAL
+}
+
+enum IncidentStatus {
+  REPORTED
+  UNDER_INVESTIGATION
+  INVESTIGATION_COMPLETE
+  CORRECTIVE_ACTIONS_PENDING
+  CLOSED
+}
+
+enum EnvironmentalType {
+  AIR_QUALITY
+  TEMPERATURE
+  HUMIDITY
+  NOISE_LEVEL
+  LIGHT_LEVEL
+  RADIATION
+  CHEMICAL_DETECTION
+  WATER_QUALITY
+  WASTE_MONITORING
+}
+
+enum AlertLevel {
+  NORMAL
+  LOW
+  MEDIUM
+  WARNING
+  HIGH
+  CRITICAL
+  EMERGENCY
+}
+
+// ===== PHASE 4: ADVANCED COST MANAGEMENT =====
+
+// Activity-Based Costing Models
+model ActivityCenter {
+  id               String               @id @default(uuid())
+  code             String               @unique
+  name             String
+  description      String?
+  activityType     ActivityType
+  costPerUnit      Decimal              @default(0) @db.Decimal(15, 4)
+  unitOfMeasure    String               // per hour, per pallet, per shipment, etc.
+  warehouseId      String?
+  warehouse        Warehouse?           @relation(fields: [warehouseId], references: [id])
+  costCenterId     String?
+  costCenter       CostCenter?          @relation(fields: [costCenterId], references: [id])
+  isActive         Boolean              @default(true)
+  activityCosts    ActivityCost[]
+  costAllocations  CostAllocation[]
+  tenantId         String
+  tenant           Tenant               @relation(fields: [tenantId], references: [id])
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@index([tenantId])
+  @@index([warehouseId])
+  @@index([activityType])
+}
+
+model ActivityCost {
+  id                    String                @id @default(uuid())
+  activityCenterId      String
+  activityCenter        ActivityCenter        @relation(fields: [activityCenterId], references: [id])
+  costDate              DateTime
+  directCost            Decimal               @default(0) @db.Decimal(15, 2)
+  indirectCost          Decimal               @default(0) @db.Decimal(15, 2)
+  totalCost             Decimal               @db.Decimal(15, 2)
+  actualUnits           Decimal               @default(0) @db.Decimal(15, 3)
+  budgetedUnits         Decimal               @default(0) @db.Decimal(15, 3)
+  varianceAmount        Decimal               @default(0) @db.Decimal(15, 2)
+  variancePercent       Decimal               @default(0) @db.Decimal(5, 2)
+  notes                 String?
+  // Link to warehouse operations
+  pickListId            String?
+  pickList              PickList?             @relation(fields: [pickListId], references: [id])
+  packingSlipId         String?
+  packingSlip           PackingSlip?          @relation(fields: [packingSlipId], references: [id])
+  shipmentId            String?
+  shipment              Shipment?             @relation("ShipmentActivityCosts", fields: [shipmentId], references: [id])
+  receiptId             String?
+  receipt               Receipt?              @relation(fields: [receiptId], references: [id])
+  putAwayTaskId         String?
+  putAwayTask           PutAwayTask?          @relation(fields: [putAwayTaskId], references: [id])
+  tenantId              String
+  tenant                Tenant                @relation(fields: [tenantId], references: [id])
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@index([tenantId, costDate])
+  @@index([activityCenterId])
+}
+
+model CostAllocation {
+  id                    String                @id @default(uuid())
+  allocationDate        DateTime
+  activityCenterId      String
+  activityCenter        ActivityCenter        @relation(fields: [activityCenterId], references: [id])
+  customerId            String?               // Link to customer/client
+  customer              User?                 @relation("CustomerCostAllocations", fields: [customerId], references: [id])
+  warehouseId           String?
+  warehouse             Warehouse?            @relation(fields: [warehouseId], references: [id])
+  shipmentId            String?
+  shipment              Shipment?             @relation("ShipmentCostAllocations", fields: [shipmentId], references: [id])
+  allocatedCost         Decimal               @db.Decimal(15, 2)
+  allocationMethod      AllocationMethod
+  allocationBasis       String                // description of allocation basis
+  unitsConsumed         Decimal               @db.Decimal(15, 3)
+  notes                 String?
+  tenantId              String
+  tenant                Tenant                @relation(fields: [tenantId], references: [id])
+  createdAt             DateTime              @default(now())
+
+  @@index([tenantId, allocationDate])
+  @@index([customerId])
+  @@index([activityCenterId])
+}
+
+model CustomerProfitability {
+  id                    String                @id @default(uuid())
+  customerId            String
+  customer              User                  @relation("CustomerProfitabilityAnalysis", fields: [customerId], references: [id])
+  analysisDate          DateTime
+  periodStart           DateTime
+  periodEnd             DateTime
+  totalRevenue          Decimal               @db.Decimal(15, 2)
+  totalDirectCosts      Decimal               @db.Decimal(15, 2)
+  totalIndirectCosts    Decimal               @db.Decimal(15, 2)
+  totalCosts            Decimal               @db.Decimal(15, 2)
+  grossProfit           Decimal               @db.Decimal(15, 2)
+  grossMarginPercent    Decimal               @db.Decimal(5, 2)
+  netProfit             Decimal               @db.Decimal(15, 2)
+  netMarginPercent      Decimal               @db.Decimal(5, 2)
+  // Activity-based metrics
+  totalShipments        Int                   @default(0)
+  totalPallets          Int                   @default(0)
+  totalWeight           Decimal               @default(0) @db.Decimal(15, 3)
+  averageCostPerShipment Decimal              @default(0) @db.Decimal(15, 2)
+  averageCostPerPallet  Decimal               @default(0) @db.Decimal(15, 2)
+  storageUtilization    Decimal               @default(0) @db.Decimal(5, 2)
+  tenantId              String
+  tenant                Tenant                @relation(fields: [tenantId], references: [id])
+  createdAt             DateTime              @default(now())
+
+  @@unique([customerId, analysisDate])
+  @@index([tenantId, analysisDate])
+}
+
+model ServiceProfitability {
+  id                    String                @id @default(uuid())
+  serviceType           ServiceType
+  warehouseId           String?
+  warehouse             Warehouse?            @relation(fields: [warehouseId], references: [id])
+  analysisDate          DateTime
+  periodStart           DateTime
+  periodEnd             DateTime
+  totalRevenue          Decimal               @db.Decimal(15, 2)
+  totalCosts            Decimal               @db.Decimal(15, 2)
+  directCosts           Decimal               @db.Decimal(15, 2)
+  indirectCosts         Decimal               @db.Decimal(15, 2)
+  grossProfit           Decimal               @db.Decimal(15, 2)
+  marginPercent         Decimal               @db.Decimal(5, 2)
+  totalUnits            Decimal               @db.Decimal(15, 3)
+  costPerUnit           Decimal               @db.Decimal(15, 4)
+  revenuePerUnit        Decimal               @db.Decimal(15, 4)
+  utilizationRate       Decimal               @default(0) @db.Decimal(5, 2)
+  tenantId              String
+  tenant                Tenant                @relation(fields: [tenantId], references: [id])
+  createdAt             DateTime              @default(now())
+
+  @@unique([serviceType, warehouseId, analysisDate])
+  @@index([tenantId, analysisDate])
+}
+
+// Enhanced Budgeting & Forecasting Models
+model BudgetScenario {
+  id                    String                @id @default(uuid())
+  name                  String
+  description           String?
+  scenarioType          BudgetScenarioType    @default(BASELINE)
+  budgetYear            Int
+  isActive              Boolean               @default(true)
+  budgetAllocations     BudgetAllocation[]
+  forecasts             BudgetForecast[]
+  varianceAnalyses      VarianceAnalysis[]
+  tenantId              String
+  tenant                Tenant                @relation(fields: [tenantId], references: [id])
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@index([tenantId, budgetYear])
+}
+
+model BudgetForecast {
+  id                    String                @id @default(uuid())
+  budgetScenarioId      String
+  budgetScenario        BudgetScenario        @relation(fields: [budgetScenarioId], references: [id])
+  costCenterId          String?
+  costCenter            CostCenter?           @relation(fields: [costCenterId], references: [id])
+  accountId             String?
+  account               ChartOfAccounts?      @relation(fields: [accountId], references: [id])
+  forecastDate          DateTime
+  forecastPeriod        ForecastPeriod        @default(MONTHLY)
+  forecastAmount        Decimal               @db.Decimal(15, 2)
+  actualAmount          Decimal               @default(0) @db.Decimal(15, 2)
+  variance              Decimal               @default(0) @db.Decimal(15, 2)
+  variancePercent       Decimal               @default(0) @db.Decimal(5, 2)
+  confidence            ForecastConfidence    @default(MEDIUM)
+  notes                 String?
+  tenantId              String
+  tenant                Tenant                @relation(fields: [tenantId], references: [id])
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@index([tenantId, forecastDate])
+  @@index([budgetScenarioId])
+}
+
+model CashFlowForecast {
+  id                    String                @id @default(uuid())
+  forecastDate          DateTime
+  forecastPeriod        ForecastPeriod        @default(MONTHLY)
+  // Operating Cash Flow
+  operatingRevenue      Decimal               @db.Decimal(15, 2)
+  operatingExpenses     Decimal               @db.Decimal(15, 2)
+  operatingCashFlow     Decimal               @db.Decimal(15, 2)
+  // Investing Cash Flow
+  investingInflow       Decimal               @default(0) @db.Decimal(15, 2)
+  investingOutflow      Decimal               @default(0) @db.Decimal(15, 2)
+  investingCashFlow     Decimal               @default(0) @db.Decimal(15, 2)
+  // Financing Cash Flow
+  financingInflow       Decimal               @default(0) @db.Decimal(15, 2)
+  financingOutflow      Decimal               @default(0) @db.Decimal(15, 2)
+  financingCashFlow     Decimal               @default(0) @db.Decimal(15, 2)
+  // Net Cash Flow
+  netCashFlow           Decimal               @db.Decimal(15, 2)
+  beginningCash         Decimal               @db.Decimal(15, 2)
+  endingCash            Decimal               @db.Decimal(15, 2)
+  actualCash            Decimal?              @db.Decimal(15, 2)
+  variance              Decimal?              @db.Decimal(15, 2)
+  confidence            ForecastConfidence    @default(MEDIUM)
+  notes                 String?
+  tenantId              String
+  tenant                Tenant                @relation(fields: [tenantId], references: [id])
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@unique([tenantId, forecastDate, forecastPeriod])
+  @@index([tenantId, forecastDate])
+}
+
+model VarianceAnalysis {
+  id                    String                @id @default(uuid())
+  analysisDate          DateTime
+  analysisType          VarianceType
+  budgetScenarioId      String?
+  budgetScenario        BudgetScenario?       @relation(fields: [budgetScenarioId], references: [id])
+  costCenterId          String?
+  costCenter            CostCenter?           @relation(fields: [costCenterId], references: [id])
+  accountId             String?
+  account               ChartOfAccounts?      @relation(fields: [accountId], references: [id])
+  budgetAmount          Decimal               @db.Decimal(15, 2)
+  actualAmount          Decimal               @db.Decimal(15, 2)
+  variance              Decimal               @db.Decimal(15, 2)
+  variancePercent       Decimal               @db.Decimal(5, 2)
+  varianceRating        VarianceRating
+  explanation           String?
+  actionRequired        Boolean               @default(false)
+  actionNotes           String?
+  tenantId              String
+  tenant                Tenant                @relation(fields: [tenantId], references: [id])
+  createdAt             DateTime              @default(now())
+
+  @@index([tenantId, analysisDate])
+  @@index([varianceRating])
+}
+
+// Enhanced Activity Types
+enum ActivityType {
+  RECEIVING
+  PUT_AWAY
+  STORAGE
+  PICKING
+  PACKING
+  SHIPPING
+  INVENTORY_MANAGEMENT
+  QUALITY_CONTROL
+  CUSTOMER_SERVICE
+  ADMINISTRATION
+  FACILITY_MAINTENANCE
+  EQUIPMENT_OPERATION
+  CROSS_DOCKING
+  VALUE_ADDED_SERVICES
+}
+
+enum AllocationMethod {
+  DIRECT
+  ACTIVITY_BASED
+  PROPORTIONAL
+  USAGE_BASED
+  TIME_BASED
+  VOLUME_BASED
+  WEIGHT_BASED
+  PALLET_BASED
+  SHIPMENT_BASED
+}
+
+enum BudgetScenarioType {
+  BASELINE
+  OPTIMISTIC
+  PESSIMISTIC
+  BEST_CASE
+  WORST_CASE
+  ROLLING_FORECAST
+}
+
+enum ForecastPeriod {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUALLY
+}
+
+enum ForecastConfidence {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum VarianceType {
+  BUDGET_VS_ACTUAL
+  FORECAST_VS_ACTUAL
+  PRIOR_PERIOD_COMPARISON
+  COST_CENTER_VARIANCE
+  ACTIVITY_VARIANCE
+}
+
+enum VarianceRating {
+  FAVORABLE_SIGNIFICANT
+  FAVORABLE_MINOR
+  WITHIN_TOLERANCE
+  UNFAVORABLE_MINOR
+  UNFAVORABLE_SIGNIFICANT
+}
+
+// =========================================================
+// Phase 5: Compliance & Audit – SOX Compliance Models
+// =========================================================
+
+model SoxControl {
+  id            String            @id @default(uuid())
+  controlNumber String            @unique
+  name          String
+  description   String
+  area          SoxControlArea
+  owner         String            // User ID responsible for control
+  frequency     ComplianceFrequency
+  status        SoxControlStatus  @default(DESIGN)
+  lastTested    DateTime?
+  nextTestDate  DateTime?
+
+  // Relations
+  tenantId      String
+  tenant        Tenant            @relation("TenantSoxControls", fields: [tenantId], references: [id])
+  tests         SoxTest[]
+  ownerUser     User?             @relation("SoxControlOwner", fields: [owner], references: [id])
+  documents     ComplianceDocument[] @relation("SoxControlDocuments")
+
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([tenantId, area])
+  @@index([owner])
+}
+
+model SoxTest {
+  id           String          @id @default(uuid())
+  controlId    String
+  testDate     DateTime
+  testedBy     String          // User ID
+  result       SoxTestResult   @default(PASS)
+  issuesFound  String?
+  remediationPlan String?
+  retestDate   DateTime?
+  tenantId     String
+
+  // Relations
+  control      SoxControl      @relation(fields: [controlId], references: [id])
+  testerUser   User?           @relation("SoxTestTester", fields: [testedBy], references: [id])
+  tenant       Tenant          @relation("TenantSoxTests", fields: [tenantId], references: [id])
+  documents    ComplianceDocument[] @relation("SoxTestDocuments")
+
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([controlId, testDate])
+}
+
+enum SoxControlArea {
+  FINANCIAL_REPORTING
+  IT_GENERAL_CONTROLS
+  INVENTORY
+  BILLING
+  REVENUE_RECOGNITION
+}
+
+enum SoxControlStatus {
+  DESIGN
+  IMPLEMENTED
+  TESTED
+  EFFECTIVE
+  INEFFECTIVE
+}
+
+enum SoxTestResult {
+  PASS
+  FAIL
+  PARTIAL
+}
+
+// =========================================================
+// Phase 5: Risk Management – Insurance Claims
+// =========================================================
+
+model InsuranceClaim {
+  id            String           @id @default(uuid())
+  claimNumber   String           @unique
+  referenceId   String?          // Link to Shipment or DamageReport ID
+  referenceType String?          // "Shipment" | "DamageReport" etc.
+  facilityId    String?
+  tenantId      String
+  insurer       String
+  dateFiled     DateTime
+  claimAmount   Decimal
+  status        InsuranceClaimStatus @default(OPEN)
+  description   String?
+  documentsUrls String[]         @default([])
+
+  // Relations
+  facility      Facility?        @relation("FacilityInsuranceClaims", fields: [facilityId], references: [id])
+  tenant        Tenant           @relation("TenantInsuranceClaims", fields: [tenantId], references: [id])
+  documents     ComplianceDocument[] @relation("InsuranceClaimDocuments")
+
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([facilityId, status])
+}
+
+enum InsuranceClaimStatus {
+  OPEN
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  CLOSED
+}
+
+// =========================================================
+// Phase 5: Document Management & Retention
+// =========================================================
+
+model ComplianceDocument {
+  id              String                @id @default(uuid())
+  title           String
+  description     String?
+  fileName        String
+  filePath        String
+  fileSize        Int
+  mimeType        String
+  documentType    DocumentType
+  category        DocumentCategory
+  
+  // Retention Policy
+  retentionPeriod Int?                  // Years to retain
+  expiryDate      DateTime?             // When document expires
+  isExpired       Boolean               @default(false)
+  
+  // Security & Access
+  isConfidential  Boolean               @default(false)
+  accessLevel     AccessLevel           @default(INTERNAL)
+  
+  // Relations
+  tenantId        String
+  tenant          Tenant                @relation("TenantComplianceDocuments", fields: [tenantId], references: [id])
+  uploadedBy      String
+  uploader        User                  @relation("DocumentUploader", fields: [uploadedBy], references: [id])
+  
+  // Link to compliance entities
+  soxControlId    String?
+  soxControl      SoxControl?           @relation("SoxControlDocuments", fields: [soxControlId], references: [id])
+  soxTestId       String?
+  soxTest         SoxTest?              @relation("SoxTestDocuments", fields: [soxTestId], references: [id])
+  insuranceClaimId String?
+  insuranceClaim  InsuranceClaim?       @relation("InsuranceClaimDocuments", fields: [insuranceClaimId], references: [id])
+  
+  versions        DocumentVersion[]
+  reminders       DocumentReminder[]
+  
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  
+  @@index([tenantId, documentType])
+  @@index([expiryDate, isExpired])
+  @@index([soxControlId])
+  @@index([insuranceClaimId])
+}
+
+model DocumentVersion {
+  id              String                @id @default(uuid())
+  documentId      String
+  versionNumber   String
+  fileName        String
+  filePath        String
+  fileSize        Int
+  changeNotes     String?
+  
+  // Relations
+  document        ComplianceDocument    @relation(fields: [documentId], references: [id])
+  uploadedBy      String
+  uploader        User                  @relation("DocumentVersionUploader", fields: [uploadedBy], references: [id])
+  
+  createdAt       DateTime              @default(now())
+  
+  @@index([documentId, versionNumber])
+}
+
+model DocumentReminder {
+  id              String                @id @default(uuid())
+  documentId      String
+  reminderDate    DateTime
+  reminderType    ReminderType
+  isCompleted     Boolean               @default(false)
+  emailSent       Boolean               @default(false)
+  
+  // Relations
+  document        ComplianceDocument    @relation(fields: [documentId], references: [id])
+  assignedTo      String?
+  assignee        User?                 @relation("DocumentReminderAssignee", fields: [assignedTo], references: [id])
+  tenantId        String
+  tenant          Tenant                @relation("TenantDocumentReminders", fields: [tenantId], references: [id])
+  
+  createdAt       DateTime              @default(now())
+  completedAt     DateTime?
+  
+  @@index([reminderDate, isCompleted])
+  @@index([documentId])
+  @@index([tenantId])
+}
+
+model DocumentRetentionPolicy {
+  id              String                @id @default(uuid())
+  name            String
+  description     String?
+  documentType    DocumentType
+  category        DocumentCategory
+  retentionPeriod Int                   // Years
+  isActive        Boolean               @default(true)
+  
+  // Auto-deletion settings
+  autoDelete      Boolean               @default(false)
+  warningPeriod   Int                   @default(30) // Days before expiry to warn
+  
+  // Relations
+  tenantId        String
+  tenant          Tenant                @relation("TenantDocumentPolicies", fields: [tenantId], references: [id])
+  createdBy       String
+  creator         User                  @relation("DocumentPolicyCreator", fields: [createdBy], references: [id])
+  
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  
+  @@unique([tenantId, documentType, category])
+  @@index([isActive])
+}
+
+// =========================================================
+// Phase 5: Compliance Reporting & Analytics
+// =========================================================
+
+model ComplianceReport {
+  id              String                @id @default(uuid())
+  title           String
+  reportType      ComplianceReportType
+  reportPeriod    ReportPeriod
+  startDate       DateTime
+  endDate         DateTime
+  
+  // Report Data (JSON)
+  reportData      Json
+  summary         String?
+  
+  // Status
+  status          ReportStatus          @default(GENERATING)
+  filePath        String?               // PDF/Excel file path
+  fileSize        Int?
+  
+  // Relations
+  tenantId        String
+  tenant          Tenant                @relation("TenantComplianceReports", fields: [tenantId], references: [id])
+  generatedBy     String
+  generator       User                  @relation("ComplianceReportGenerator", fields: [generatedBy], references: [id])
+  
+  createdAt       DateTime              @default(now())
+  completedAt     DateTime?
+  
+  @@index([tenantId, reportType])
+  @@index([reportPeriod, status])
+}
+
+model ComplianceMetric {
+  id              String                @id @default(uuid())
+  metricName      String
+  metricType      MetricType
+  value           Decimal
+  target          Decimal?
+  unit            String?
+  
+  // Time period
+  periodStart     DateTime
+  periodEnd       DateTime
+  
+  // Context
+  category        String?               // e.g., "SOX Controls", "Insurance Claims"
+  subcategory     String?               // e.g., "Financial Reporting", "IT Controls"
+  
+  // Relations
+  tenantId        String
+  tenant          Tenant                @relation("TenantComplianceMetrics", fields: [tenantId], references: [id])
+  
+  createdAt       DateTime              @default(now())
+  
+  @@index([tenantId, metricType, periodStart])
+  @@index([metricName, periodStart])
+}
+
+// =========================================================
+// Phase 5: Risk Assessment & Credit Management
+// =========================================================
+
+model RiskAssessment {
+  id              String                @id @default(uuid())
+  entityType      String                // "Customer", "Supplier", "Project"
+  entityId        String
+  entityName      String                // For display purposes
+  
+  // Risk Scores
+  overallRisk     RiskLevel
+  creditRisk      RiskLevel?
+  operationalRisk RiskLevel?
+  complianceRisk  RiskLevel?
+  
+  // Scoring Details
+  creditScore     Int?                  // 0-850
+  riskScore       Decimal               // Overall risk score
+  riskFactors     Json                  // Array of risk factors
+  
+  // Assessment Details
+  assessmentDate  DateTime
+  assessmentNotes String?
+  reviewDate      DateTime?             // Next review due date
+  
+  // Relations
+  tenantId        String
+  tenant          Tenant                @relation("TenantRiskAssessments", fields: [tenantId], references: [id])
+  assessedBy      String
+  assessor        User                  @relation("RiskAssessmentAssessor", fields: [assessedBy], references: [id])
+  
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  
+  @@index([tenantId, entityType, entityId])
+  @@index([overallRisk, assessmentDate])
+}
+
+model CreditLimit {
+  id              String                @id @default(uuid())
+  customerId      String                // Reference to customer
+  customerName    String                // For display
+  
+  // Credit Details
+  creditLimit     Decimal
+  availableCredit Decimal
+  currentBalance  Decimal               @default(0)
+  
+  // Terms
+  paymentTerms    Int                   // Days
+  interestRate    Decimal?              // Annual percentage
+  
+  // Status
+  status          CreditStatus          @default(ACTIVE)
+  approvalDate    DateTime?
+  expiryDate      DateTime?
+  
+  // Relations
+  tenantId        String
+  tenant          Tenant                @relation("TenantCreditLimits", fields: [tenantId], references: [id])
+  approvedBy      String?
+  approver        User?                 @relation("CreditLimitApprover", fields: [approvedBy], references: [id])
+  
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  
+  @@unique([tenantId, customerId])
+  @@index([status, expiryDate])
+}
+
+// =========================================================
+// Phase 5: Enums
+// =========================================================
+
+enum DocumentType {
+  SOX_CONTROL_PROCEDURE
+  SOX_TEST_EVIDENCE
+  INSURANCE_POLICY
+  INSURANCE_CLAIM_FORM
+  AUDIT_REPORT
+  COMPLIANCE_CERTIFICATE
+  RISK_ASSESSMENT
+  PROCEDURE_MANUAL
+  TRAINING_RECORD
+  OTHER
+}
+
+enum DocumentCategory {
+  FINANCIAL_REPORTING
+  IT_CONTROLS
+  OPERATIONAL_CONTROLS
+  INSURANCE_DOCUMENTATION
+  AUDIT_EVIDENCE
+  TRAINING_MATERIALS
+  POLICIES_PROCEDURES
+  CERTIFICATIONS
+  LEGAL_DOCUMENTS
+  OTHER
+}
+
+enum AccessLevel {
+  PUBLIC
+  INTERNAL
+  CONFIDENTIAL
+  RESTRICTED
+}
+
+enum ReminderType {
+  EXPIRY_WARNING
+  REVIEW_DUE
+  UPDATE_REQUIRED
+  APPROVAL_NEEDED
+}
+
+enum ComplianceReportType {
+  SOX_CONTROL_STATUS
+  SOX_TEST_RESULTS
+  INSURANCE_CLAIMS_SUMMARY
+  AUDIT_TRAIL_REPORT
+  DOCUMENT_EXPIRY_REPORT
+  RISK_ASSESSMENT_SUMMARY
+  COMPLIANCE_DASHBOARD
+}
+
+enum ReportPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUALLY
+  CUSTOM
+}
+
+enum ReportStatus {
+  GENERATING
+  COMPLETED
+  FAILED
+  SCHEDULED
+}
+
+enum MetricType {
+  COUNT
+  PERCENTAGE
+  AMOUNT
+  RATIO
+  SCORE
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum CreditStatus {
+  ACTIVE
+  SUSPENDED
+  EXPIRED
+  UNDER_REVIEW
+  DENIED
+}
+
+// CRM Extensions
+
+model Lead {
+  id          String     @id @default(uuid())
+  firstName   String
+  lastName    String
+  email       String     @unique
+  phone       String?
+  companyName String?
+  status      LeadStatus @default(NEW)
+  source      String?
+  ownerId     String?
+  owner       User?      @relation("LeadOwner", fields: [ownerId], references: [id])
+  accountId   String?
+  account     Account?   @relation(fields: [accountId], references: [id])
+  tenantId    String
+  tenant      Tenant     @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+enum LeadStatus {
+  NEW
+  QUALIFIED
+  CONVERTED
+  DISQUALIFIED
+}
+
+model Quote {
+  id            String      @id @default(uuid())
+  title         String
+  amount        Float
+  validUntil    DateTime
+  dealId        String
+  deal          Deal        @relation(fields: [dealId], references: [id])
+  version       Int         @default(1)
+  documentId    String?
+  document      Document?   @relation(fields: [documentId], references: [id])
+  tenantId      String
+  tenant        Tenant      @relation(fields: [tenantId], references: [id])
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model Task {
+  id          String       @id @default(uuid())
+  title       String
+  description String?
+  dueDate     DateTime?
+  completed   Boolean      @default(false)
+  assigneeId  String?
+  assignee    User?        @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  accountId   String?
+  account     Account?     @relation(fields: [accountId], references: [id])
+  tenantId    String
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Ticket {
+  id          String       @id @default(uuid())
+  subject     String
+  description String?
+  status      TicketStatus @default(OPEN)
+  priority    TicketPriority @default(NORMAL)
+  accountId   String
+  account     Account      @relation(fields: [accountId], references: [id])
+  assigneeId  String?
+  assignee    User?        @relation("TicketAssignee", fields: [assigneeId], references: [id])
+  tenantId    String
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+  ON_HOLD
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+

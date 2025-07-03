@@ -10,12 +10,10 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { getApiUrl } from '../utils/apiHost';
 
-const localhost = Platform.OS === 'android' ? '10.0.2.2' : '192.168.0.73';
-const API_URL =
-  Constants.manifest?.extra?.apiUrl ||
-  Constants.expoConfig?.extra?.apiUrl ||
-  `http://${localhost}:3000`;
+
+const API_URL = getApiUrl();
 
 function DamageReportsScreen({ navigation }) {
   const { userToken } = useContext(AuthContext);
@@ -51,6 +49,23 @@ function DamageReportsScreen({ navigation }) {
 
   const onRefresh = () => {
     loadReports(true);
+  };
+
+  const handleFileInsuranceClaim = (damageReport) => {
+    // Navigate to create insurance claim with pre-populated data
+    const claimData = {
+      referenceId: damageReport.id,
+      referenceType: 'DamageReport',
+      description: `Insurance claim for ${damageReport.type.toLowerCase()} incident: ${damageReport.InventoryItem?.name || 'Unknown item'}. ${damageReport.description || ''}`.trim(),
+      claimAmount: '', // User will need to fill this in
+      warehouseId: damageReport.warehouseId
+    };
+    
+    navigation.navigate('CreateInsuranceClaim', { 
+      prefilledData: claimData,
+      sourceType: 'DamageReport',
+      sourceData: damageReport
+    });
   };
 
   const handleExport = async () => {
@@ -175,6 +190,17 @@ function DamageReportsScreen({ navigation }) {
       )}
       
       <View style={styles.reportFooter}>
+        <TouchableOpacity
+          style={styles.claimButton}
+          onPress={(e) => {
+            e.stopPropagation();
+            handleFileInsuranceClaim(item);
+          }}
+          activeOpacity={0.7}
+        >
+          <MaterialCommunityIcons name="shield-account" size={16} color="#007AFF" />
+          <Text style={styles.claimButtonText}>File Claim</Text>
+        </TouchableOpacity>
         <MaterialCommunityIcons name="chevron-right" size={20} color="#C7C7CC" />
       </View>
     </TouchableOpacity>
@@ -521,7 +547,27 @@ const styles = StyleSheet.create({
   
   // Report Footer
   reportFooter: {
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  claimButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F8FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#007AFF',
+  },
+
+  claimButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#007AFF',
+    marginLeft: 4,
   },
   
   // Empty State

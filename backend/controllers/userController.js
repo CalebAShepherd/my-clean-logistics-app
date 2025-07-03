@@ -3,21 +3,38 @@ const prisma = new PrismaClient();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 
-// Change a user's role (admin only)
+// Change a user's role (admin and crm_admin)
 exports.changeRole = async (req, res) => {
   const { id } = req.params;
   const { role } = req.body;
 
   // Validate role
-  const validRoles = ['admin', 'client', 'dispatcher', 'transporter', 'warehouse_admin'];
+  const validRoles = ['admin', 'client', 'dispatcher', 'transporter', 'warehouse_admin', 'crm_admin', 'sales_rep', 'account_manager'];
   if (!validRoles.includes(role)) {
     return res.status(400).json({ error: 'Invalid role' });
+  }
+
+  // CRM roles that can be managed by crm_admin
+  const crmRoles = ['crm_admin', 'sales_rep', 'account_manager'];
+  const currentUserRole = req.user.role;
+
+  // If the current user is crm_admin, restrict what they can do
+  if (currentUserRole === 'crm_admin') {
+    // CRM admins can only change roles to other CRM roles
+    if (!crmRoles.includes(role)) {
+      return res.status(403).json({ error: 'CRM admins can only assign CRM roles' });
+    }
   }
 
   try {
     const user = await prisma.user.findUnique({ where: { id } });
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
+    }
+
+    // If current user is crm_admin, they can only modify users with CRM roles
+    if (currentUserRole === 'crm_admin' && !crmRoles.includes(user.role)) {
+      return res.status(403).json({ error: 'CRM admins can only modify CRM users' });
     }
 
     const updated = await prisma.user.update({
@@ -40,8 +57,20 @@ exports.changeRole = async (req, res) => {
 // List all users (admin only)
 exports.listUsers = async (req, res) => {
     try {
+      const { role, warehouseId } = req.query;
+      
+      // Build where clause based on query parameters
+      const where = {};
+      if (role) {
+        where.role = role;
+      }
+      if (warehouseId) {
+        where.warehouseId = warehouseId;
+      }
+      
       const users = await prisma.user.findMany({
-        select: { id: true, email: true, username: true, role: true, warehouseId: true }
+        where,
+        select: { id: true, email: true, username: true, role: true, warehouseId: true, phone: true }
       });
       res.json(users);
     } catch (err) {

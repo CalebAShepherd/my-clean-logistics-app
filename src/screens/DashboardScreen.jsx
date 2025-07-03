@@ -8,9 +8,10 @@ import { useSettings } from '../context/SettingsContext';
 import Constants from 'expo-constants';
 import { fetchNotifications } from '../api/notifications';
 import { useFocusEffect } from '@react-navigation/native';
+import { getApiUrl } from '../utils/apiHost';
 
 // Base API URL for data fetches
-const API_URL = Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.73:3000';
+const API_URL = getApiUrl();
 
 export default function DashboardScreen({ navigation }) {
   const { user, userToken } = useContext(AuthContext);

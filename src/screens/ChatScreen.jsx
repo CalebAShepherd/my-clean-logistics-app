@@ -12,8 +12,9 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import InternalHeader from '../components/InternalHeader';
 import { ScrollView } from 'react-native-gesture-handler';
 import socketService from '../services/socketService';
+import { getApiUrl } from '../utils/apiHost';
 
-const API_URL = Constants.manifest?.extra?.apiUrl || Constants.expoConfig?.extra?.apiUrl || 'http://192.168.0.73:3000';
+const API_URL = getApiUrl();
 
 export default function ChatScreen({ route, navigation }) {
   const { conversationId, name, isGroup } = route.params;

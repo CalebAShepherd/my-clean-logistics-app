@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
+const logAudit = require('../services/auditLogger');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret';
 
@@ -25,12 +26,19 @@ exports.signup = async (req, res) => {
     // Hash password
     const hashed = await bcrypt.hash(password, 10);
 
+    // For now, let's assign a default tenant
+    const tenantId = 'default-tenant';
+
     // Create user
     const user = await prisma.user.create({
-      data: { email, username, password: hashed, role: 'client' }
+      data: { email, username, password: hashed, role: 'client', tenantId }
     });
 
-    return res.status(201).json({ id: user.id, email: user.email, role: user.role });
+    // Audit
+    await logAudit(req, 'User', user.id, 'CREATE', { email, username }, 'SYSTEM');
+
+    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET);
+    res.status(201).json({ token, userId: user.id, role: user.role });
   } catch (err) {
     console.error('Signup error', err);
     return res.status(500).json({ error: 'Internal server error' });
@@ -40,12 +48,22 @@ exports.signup = async (req, res) => {
 // Login - authenticate and return a JWT
 exports.login = async (req, res) => {
   try {
-    const { username, password } = req.body;
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password are required' });
+    const { email, username, password } = req.body;
+    const loginField = email || username;
+    
+    if (!loginField || !password) {
+      return res.status(400).json({ error: 'Email/username and password are required' });
     }
     
-    const user = await prisma.user.findUnique({ where: { username } });
+    // Find user by email or username
+    const user = await prisma.user.findFirst({ 
+      where: { 
+        OR: [
+          { email: loginField },
+          { username: loginField }
+        ]
+      } 
+    });
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -56,14 +74,12 @@ exports.login = async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Sign JWT
-    const token = jwt.sign(
-      { userId: user.id, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
+    // Audit login
+    await logAudit(req, 'User', user.id, 'LOGIN', null, 'SYSTEM');
 
-    return res.json({ token });
+    const token = jwt.sign({ userId: user.id, role: user.role, tenantId: user.tenantId }, process.env.JWT_SECRET);
+
+    return res.json({ token, userId: user.id, role: user.role, tenantId: user.tenantId });
   } catch (err) {
     console.error('Login error', err);
     return res.status(500).json({ error: 'Internal server error' });
