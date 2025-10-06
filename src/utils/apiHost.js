@@ -1,79 +1,67 @@
-import { Platform } from 'react-native';
+import { Platform, NativeModules } from 'react-native';
 import Constants from 'expo-constants';
 
+function extractHostFromScriptURL() {
+  try {
+    const scriptURL = NativeModules?.SourceCode?.scriptURL;
+    if (scriptURL) {
+      // Examples:
+      // - http://192.168.1.10:8081/index.bundle?platform=ios&dev=true
+      // - http://localhost:8081/index.bundle?platform=android&dev=true
+      const m = scriptURL.match(/^[^:]+:\/\/([^/:]+)(?::\d+)?\//);
+      if (m && m[1]) return m[1];
+    }
+  } catch {}
+  return null;
+}
+
 export function getHost() {
-  console.log('=== HOST RESOLUTION DEBUG ===');
-  console.log('Platform:', Platform.OS);
-  console.log('manifest.debuggerHost:', Constants.manifest?.debuggerHost);
-  console.log('expoConfig.debuggerHost:', Constants.expoConfig?.debuggerHost);
-  console.log('manifest2.extra.expoGo:', Constants.manifest2?.extra?.expoGo);
-  
-  let host = 'localhost'; // Default fallback
-  
-  // Try to get host from various Expo constants
-  const debuggerHost = Constants.manifest?.debuggerHost || 
-                      Constants.expoConfig?.debuggerHost ||
-                      Constants.manifest2?.extra?.expoGo?.debuggerHost;
-  
+  // 1) Build-time env overrides (preferred)
+  const envHost = process.env.EXPO_PUBLIC_API_HOST || process.env.API_HOST;
+  if (envHost) return envHost;
+
+  // 2) Try to infer from the script URL used to load the bundle
+  const scriptHost = extractHostFromScriptURL();
+  if (scriptHost && scriptHost !== 'localhost' && scriptHost !== '127.0.0.1') {
+    return scriptHost;
+  }
+
+  // 3) Expo debugger/host URIs (development with Expo Go)
+  const debuggerHost =
+    Constants.manifest?.debuggerHost ||
+    Constants.expoConfig?.debuggerHost ||
+    Constants.manifest2?.extra?.expoGo?.debuggerHost ||
+    Constants.manifest?.hostUri ||
+    Constants.expoConfig?.hostUri;
   if (debuggerHost) {
-    // Extract IP from debugger host (format: "192.168.1.100:19000")
     const hostPart = debuggerHost.split(':')[0];
     if (hostPart && hostPart !== 'localhost' && hostPart !== '127.0.0.1') {
-      host = hostPart;
-      console.log('Using debugger host:', host);
-      return host;
+      return hostPart;
     }
   }
-  
-  // Try to get from packager host
-  if (Constants.manifest?.packagerOpts?.dev) {
-    const packagerHost = Constants.manifest.packagerOpts.lanType === 'ip' ? 
-                        Constants.manifest.debuggerHost?.split(':')[0] : null;
-    if (packagerHost && packagerHost !== 'localhost' && packagerHost !== '127.0.0.1') {
-      host = packagerHost;
-      console.log('Using packager host:', host);
-      return host;
-    }
-  }
-  
-  // For development, try to detect if we're on a real device
-  if (__DEV__) {
-    // Check if we're likely on a real device (not simulator/emulator)
-    const isRealDevice = Platform.OS === 'ios' ? 
-      !Constants.isDevice === false : // iOS simulator detection
-      Platform.OS === 'android' && Constants.isDevice;
-    
-    if (isRealDevice) {
-      // For real devices, we need the actual network IP
-      // This is a known limitation - we'll need to use a hardcoded IP or network discovery
-      console.log('Real device detected - you may need to set a specific IP');
-      
-      // Try to get from expo config if available
-      const configHost = Constants.expoConfig?.extra?.apiHost;
-      if (configHost) {
-        host = configHost;
-        console.log('Using config host:', host);
-        return host;
-      }
-    }
-  }
-  
-  // Android emulator special case
+
+  // 4) Android emulator loopback mapping
   if (Platform.OS === 'android' && !Constants.isDevice) {
-    host = '10.0.2.2';
-    console.log('Using Android emulator host:', host);
-    return host;
+    return '10.0.2.2';
   }
-  
-  console.log('Using fallback host:', host);
-  return host;
+
+  // 5) Config fallback (last resort for real devices)
+  const configHost = Constants.expoConfig?.extra?.apiHost;
+  if (configHost) return configHost;
+
+  // 6) Safe default
+  return 'localhost';
 }
 
 export function getApiUrl() {
+  // Full URL override if provided (e.g., http://myhost:1234 or https://api.example.com)
+  const full = process.env.EXPO_PUBLIC_API_URL || process.env.API_URL;
+  if (full) return full;
+
   const host = getHost();
-  const port = Constants.expoConfig?.extra?.apiPort || 3000;
-  const url = `http://${host}:${port}`;
-  console.log('Resolved API URL:', url);
+  const port = process.env.EXPO_PUBLIC_API_PORT || process.env.API_PORT || Constants.expoConfig?.extra?.apiPort || 3000;
+  const protocol = process.env.EXPO_PUBLIC_API_PROTOCOL || process.env.API_PROTOCOL || 'http';
+  const url = `${protocol}://${host}:${port}`;
   return url;
 }
 
