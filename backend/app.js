@@ -78,6 +78,8 @@ const financialReportingRouter = require('./routes/financialReporting');
 // New floorplan router
 const floorplanRouter = require('./routes/floorplan');
 const blueprintRouter = require('./routes/blueprints');
+const operationsRouter = require('./routes/operations');
+const eventsRouter = require('./routes/events');
 
 // CRM Routes
 const crmAccountsRouter = require('./routes/crmAccounts');
@@ -177,6 +179,9 @@ app.use('/api/financial-reporting', financialReportingRouter);
 // New floorplan router
 app.use('/api/floorplan', floorplanRouter);
 app.use('/api/blueprints', blueprintRouter);
+// Optimizer integration
+app.use('/api/operations', operationsRouter);
+app.use('/api/events', eventsRouter);
 
 // CRM Mounts
 app.use('/api/crm/accounts', crmAccountsRouter);
