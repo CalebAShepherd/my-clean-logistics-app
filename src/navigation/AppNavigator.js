@@ -107,6 +107,7 @@ import TicketsListScreen from '../screens/TicketsListScreen';
 import TicketDetailScreen from '../screens/TicketDetailScreen';
 import TasksListScreen from '../screens/TasksListScreen';
 import AccountDetailScreen from '../screens/AccountDetailScreen';
+import WarehouseManagerDashboardScreen from '../screens/WarehouseManagerDashboardScreen';
 
 // ERP Financial System Screens
 import ERPFinancialDashboardScreen from '../screens/ERPFinancialDashboardScreen';
@@ -609,6 +610,44 @@ function WarehouseAdminTabsNavigator() {
   );
 }
 
+function WarehouseManagerTabsNavigator() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarIcon: ({ color, focused }) => {
+          let iconName;
+          if (route.name === 'Home') iconName = focused ? 'home' : 'home-outline';
+          else if (route.name === 'Dock') iconName = focused ? 'boat' : 'boat-outline';
+          else if (route.name === 'Slotting') iconName = focused ? 'cube' : 'cube-outline';
+          else if (route.name === 'Forecast') iconName = focused ? 'trending-up' : 'trending-up-outline';
+          else iconName = focused ? 'person' : 'person-outline';
+          return (
+            <View style={{ alignItems: 'center', justifyContent: 'center', width: 50, height: 50, borderRadius: 25, marginBottom: focused ? 4 : 0 }}>
+              <Ionicons name={iconName} size={focused ? 26 : 22} color={color} />
+            </View>
+          );
+        },
+        tabBarActiveTintColor: '#111827',
+        tabBarInactiveTintColor: '#9CA3AF',
+        tabBarStyle: {
+          position: 'absolute', bottom: 25, left: 20, right: 20,
+          backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 25, height: 70, borderTopWidth: 0,
+          shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 15,
+        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600', marginTop: -8, marginBottom: 8 },
+        tabBarItemStyle: { paddingVertical: 8, borderRadius: 20, marginHorizontal: 4 },
+      })}
+    >
+      <Tab.Screen name="Home" component={WarehouseManagerDashboardScreen} options={{ title: 'Home' }} />
+      <Tab.Screen name="Dock" component={DockManagementScreen} options={{ title: 'Dock' }} />
+      <Tab.Screen name="Slotting" component={SlottingOptimizationScreen} options={{ title: 'Slotting' }} />
+      <Tab.Screen name="Forecast" component={BudgetingForecastingScreen} options={{ title: 'Forecast' }} />
+      <Tab.Screen name="Account" component={SettingsScreen} options={{ title: 'Profile' }} />
+    </Tab.Navigator>
+  );
+}
+
 function WarehouseWorkerTabsNavigator() {
   const [showScanner, setShowScanner] = React.useState(false);
 
@@ -980,6 +1019,8 @@ function RoleBasedNavigator() {
   switch (user?.role) {
     case 'warehouse_admin':
       return <WarehouseAdminTabsNavigator />;
+    case 'warehouse_manager':
+      return <WarehouseManagerTabsNavigator />;
     case 'warehouse_worker':
       return <WarehouseWorkerNavigator />;
     case 'transporter':
