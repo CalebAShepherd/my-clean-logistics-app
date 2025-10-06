@@ -202,15 +202,45 @@ export default function Warehouse3DView({ route }) {
                   const levelGap = rackObj.size.y / (numLevels + 1);
                   const binHeight = levelGap - shelfTh;
                   const shelfY = (shelfIndex + 1) * levelGap;
-                  const posX = rackObj.position.x - rackObj.size.x/2 + cellWidth/2 + index*cellWidth;
-                  const posZ = rackObj.position.z;
-                  const posY = rackObj.position.y + shelfY + shelfTh/2 + binHeight/2;
+                  // Replace rectangular bins with cube bins at front edge of shelves
+                  const cubeSize = cellWidth;
+                  const cubeHalf = cubeSize / 2;
+                  // Compute bin positions on left and right halves at front edge
+                  const posZ = rackObj.position.z - rackObj.size.z / 2 + cubeHalf;
+                  const groupCount = bucket.length;
+                  const leftCount = Math.ceil(groupCount / 2);
+                  const rightCount = groupCount - leftCount;
+                  const halfWidth = rackObj.size.x / 2;
+                  const leftEdgeX = rackObj.position.x - halfWidth + cubeHalf;
+                  const rightEdgeX = rackObj.position.x + halfWidth - cubeHalf;
+                  let posX;
+                  if (index < leftCount) {
+                    // Left half distribution
+                    if (leftCount > 1) {
+                      const leftRange = halfWidth - cubeSize;
+                      const spacingLeft = leftRange / (leftCount - 1);
+                      posX = leftEdgeX + index * spacingLeft;
+                    } else {
+                      posX = leftEdgeX;
+                    }
+                  } else {
+                    // Right half distribution
+                    const j = index - leftCount;
+                    if (rightCount > 1) {
+                      const rightRange = halfWidth - cubeSize;
+                      const spacingRight = rightRange / (rightCount - 1);
+                      posX = rightEdgeX - j * spacingRight;
+                    } else {
+                      posX = rightEdgeX;
+                    }
+                  }
+                  const posY = rackObj.position.y + shelfY + shelfTh / 2 + cubeHalf;
                   console.log(`    Computed position x:${posX.toFixed(2)}, y:${posY.toFixed(2)}, z:${posZ.toFixed(2)}`);
                   binMeshes.push({
                     id: `bin-${loc.id}`,
                     type: 'bin',
                     position: { x: posX, y: posY, z: posZ },
-                    size: { x: cellWidth, y: binHeight, z: cellDepth },
+                    size: { x: cubeSize, y: cubeSize, z: cubeSize },
                     color: 0x34C759,
                     label: loc.bin || `Bin-${index+1}`,
                     metadata: { ...loc }
@@ -264,17 +294,27 @@ export default function Warehouse3DView({ route }) {
             const levelGap = rackObj.size.y / (numLevels + 1);
             const binHeight = levelGap - shelfTh;
             const shelfY = (shelfIndex + 1) * levelGap;
-            const posX = rackObj.position.x - rackObj.size.x / 2 + cellWidth / 2 + columnIndex * cellWidth;
-            const posZ = rackObj.position.z;
-            const posY = rackObj.position.y + shelfY + shelfTh / 2 + binHeight / 2;
+            // Replace rectangular bins with cube bins at front edge of shelves
+            const cubeSize = cellWidth;
+            const cubeHalf = cubeSize / 2;
+            // Position new bin from front to back edges along depth axis
+            const frontEdgeZ = rackObj.position.z - rackObj.size.z / 2 + cubeHalf;
+            let posZ;
+            if (numColumns > 1) {
+              const spacing = (rackObj.size.z - cubeSize) / (numColumns - 1);
+              posZ = frontEdgeZ + columnIndex * spacing;
+            } else {
+              posZ = frontEdgeZ;
+            }
+            const posX = rackObj.position.x;
             const newBin = {
-              id: binData.id,
+              id: `bin-${rackId}-${shelfIndex}-${columnIndex}-${Date.now()}`,
               type: 'bin',
               position: { x: posX, y: posY, z: posZ },
-              size: { x: cellWidth, y: binHeight, z: cellDepth },
+              size: { x: cubeSize, y: cubeSize, z: cubeSize },
               color: 0x34C759,
-              label: binData.metadata.bin || `${cellWidth.toFixed(1)}`,
-              metadata: { ...binData.metadata, rackId: rackObj.id, shelfIndex, columnIndex }
+              label: `Bin ${columnIndex + 1}`,
+              metadata: { rackId, shelfIndex, columnIndex }
             };
             setObjects(prev => [...prev, newBin]);
             if (binData.id) setSelectedId(binData.id);
@@ -2170,15 +2210,41 @@ export default function Warehouse3DView({ route }) {
     const levelGap = rackObj.size.y / (numLevels + 1);
     const binHeight = levelGap - shelfTh;
     const shelfY = (shelfIndex + 1) * levelGap;
-    // Position
-    const posX = rackObj.position.x - rackObj.size.x / 2 + cellWidth / 2 + columnIndex * cellWidth;
-    const posZ = rackObj.position.z;
-    const posY = rackObj.position.y + shelfY + shelfTh / 2 + binHeight / 2;
+    // Position bins on left/right halves at front edge
+    const cubeSize = cellWidth;
+    const cubeHalf = cubeSize / 2;
+    const frontEdgeZ = rackObj.position.z - rackObj.size.z / 2 + cubeHalf;
+    const leftCount = Math.ceil(numColumns / 2);
+    const rightCount = numColumns - leftCount;
+    const halfWidth = rackObj.size.x / 2;
+    const leftEdgeX = rackObj.position.x - halfWidth + cubeHalf;
+    const rightEdgeX = rackObj.position.x + halfWidth - cubeHalf;
+    let posX;
+    if (columnIndex < leftCount) {
+      if (leftCount > 1) {
+        const leftRange = halfWidth - cubeSize;
+        const spacingLeft = leftRange / (leftCount - 1);
+        posX = leftEdgeX + columnIndex * spacingLeft;
+      } else {
+        posX = leftEdgeX;
+      }
+    } else {
+      const j = columnIndex - leftCount;
+      if (rightCount > 1) {
+        const rightRange = halfWidth - cubeSize;
+        const spacingRight = rightRange / (rightCount - 1);
+        posX = rightEdgeX - j * spacingRight;
+      } else {
+        posX = rightEdgeX;
+      }
+    }
+    const posZ = frontEdgeZ;
+    const posY = rackObj.position.y + shelfY + shelfTh / 2 + cubeHalf;
     const newBin = {
       id: `bin-${rackId}-${shelfIndex}-${columnIndex}-${Date.now()}`,
       type: 'bin',
       position: { x: posX, y: posY, z: posZ },
-      size: { x: cellWidth, y: binHeight, z: cellDepth },
+      size: { x: cubeSize, y: cubeSize, z: cubeSize },
       color: 0x34C759,
       label: `Bin ${columnIndex + 1}`,
       metadata: { rackId, shelfIndex, columnIndex }
